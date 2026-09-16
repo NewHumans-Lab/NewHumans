@@ -1,5 +1,5 @@
 import { appendEvent, resolveActor } from './core.js';
-import { activateRuntime } from './runtime_control.js';
+import { resumeRuntime } from './runtime_policy.js';
 
 function problem(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -82,7 +82,7 @@ export async function runDueWakeScheduledAction(client, {
   }
 
   try {
-    const activation = await activateRuntime(client, {
+    const activation = await resumeRuntime(client, {
       worldId,
       agentEntityId: row.subject_id,
       billingDate,
