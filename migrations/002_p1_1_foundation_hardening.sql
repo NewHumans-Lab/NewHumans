@@ -34,6 +34,7 @@ ALTER TABLE economy.wallets
 
 ALTER TABLE economy.journals
   DROP CONSTRAINT IF EXISTS journals_reversal_of_fkey,
+  ADD COLUMN expected_posting_count integer NOT NULL DEFAULT 2 CHECK (expected_posting_count >= 2),
   ADD CONSTRAINT journals_world_journal_key UNIQUE (world_id, journal_id),
   ADD CONSTRAINT journals_reversal_world_fkey
     FOREIGN KEY (world_id, reversal_of) REFERENCES economy.journals(world_id, journal_id);
@@ -105,8 +106,8 @@ BEGIN
     FROM economy.postings
    WHERE journal_id = NEW.journal_id;
 
-  IF v_count < 2 THEN
-    RAISE EXCEPTION 'journal % must contain at least two postings', NEW.journal_id USING ERRCODE = '23514';
+  IF v_count <> NEW.expected_posting_count THEN
+    RAISE EXCEPTION 'journal % expected % postings but has %', NEW.journal_id, NEW.expected_posting_count, v_count USING ERRCODE = '23514';
   END IF;
   IF v_sum <> 0 THEN
     RAISE EXCEPTION 'journal % is not balanced: %', NEW.journal_id, v_sum USING ERRCODE = '23514';
