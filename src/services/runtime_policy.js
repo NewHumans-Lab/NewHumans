@@ -32,6 +32,15 @@ async function subjectOrSystem(client, worldId, subjectId, actorEntityId) {
   return actor;
 }
 
+async function lockedProfile(client, worldId, subjectId) {
+  const row = (await client.query(
+    `SELECT agent_entity_id FROM runtime.agent_profiles WHERE world_id=$1 AND agent_entity_id=$2 FOR UPDATE`,
+    [worldId, subjectId],
+  )).rows[0];
+  if (!row) throw problem('RUNTIME_PROFILE_NOT_FOUND', 'runtime profile not found', 404);
+  return row;
+}
+
 async function lockedState(client, worldId, subjectId) {
   const row = (await client.query(
     `SELECT life_status,execution_status,model_status,restriction_flags,archive_status,state_version,dormant_reason,last_transition_at,updated_at
@@ -77,6 +86,9 @@ export async function getRuntimeEligibility(client, input) {
 
 export async function resumeRuntime(client, input) {
   await subjectOrSystem(client, input.worldId, input.agentEntityId, input.actorEntityId);
+  // Canonical lock order is profile -> lifecycle everywhere that may touch both rows.
+  // This matches publishModelRoute/activateRuntime and removes the old lifecycle->profile deadlock path.
+  await lockedProfile(client, input.worldId, input.agentEntityId);
   const state = await lockedState(client, input.worldId, input.agentEntityId);
   const blocking = state.restriction_flags.filter((flag) => POLICY_BLOCKING_FLAGS.has(flag));
   if (blocking.length) {
@@ -138,11 +150,14 @@ export async function setRuntimeRestriction(client, {
 export async function claimAutonomousScheduledAction(client, input) {
   await systemActor(client, input.worldId, input.actorEntityId);
   const row = (await client.query(
-    `SELECT action_kind FROM runtime.scheduled_actions WHERE world_id=$1 AND scheduled_action_id=$2`,
+    `SELECT action_kind,status FROM runtime.scheduled_actions WHERE world_id=$1 AND scheduled_action_id=$2 FOR UPDATE`,
     [input.worldId, input.scheduledActionId],
   )).rows[0];
   if (!row) throw problem('SCHEDULED_ACTION_NOT_FOUND', 'scheduled action not found', 404);
   if (row.action_kind !== 'AUTONOMOUS_TURN') throw problem('WRONG_SCHEDULE_PATH', 'WAKE schedules must use the atomic wake scheduler path', 409);
+  // The public claim operation is the single worker entry point. A CLAIMED row is not a
+  // second path: it is routed into the same higher-epoch recovery authority below.
+  if (row.status === 'CLAIMED') return recoverAutonomousScheduledClaim(client, input);
   return claimScheduledAction(client, input);
 }
 
@@ -161,11 +176,12 @@ export async function recoverAutonomousScheduledClaim(client, {
   if (row.status !== 'CLAIMED') throw problem('SCHEDULED_ACTION_NOT_RECOVERABLE', `scheduled action is ${row.status}`, 409);
 
   const lease = (await client.query(
-    `SELECT worker_id,lease_epoch,expires_at,released_at FROM runtime.runtime_leases
+    `SELECT worker_id,lease_epoch,released_at,(released_at IS NULL AND expires_at > now()) active
+       FROM runtime.runtime_leases
       WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
     [worldId, row.subject_id],
   )).rows[0];
-  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || lease.released_at || new Date(lease.expires_at).getTime() <= Date.now()) {
+  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || !lease.active) {
     throw problem('STALE_RUNTIME_LEASE', 'recovery worker does not hold the current active runtime lease', 409);
   }
   if (BigInt(epoch) <= BigInt(row.claimed_lease_epoch)) {
