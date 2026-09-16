@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased — P1.2 minimum M06 gateway
+## Unreleased — P1.3 M06 design-conformance hardening
+
+### Fixed
+- `max_input_tokens` is now an enforced execution boundary instead of descriptor-only metadata; the generic OpenAI-compatible adapter uses a documented conservative pre-dispatch upper bound.
+- Every provider attempt/retry revalidates the current active actor, current UTC activity day, charged fee, positive available Energy, descriptor/connector availability and platform reservation before the attempt is marked `DISPATCHED`.
+- A retry cannot reuse yesterday's activity qualification or continue after the actor/route/budget becomes invalid.
+- Known provider usage is now settled and receipted even when a successful HTTP response has malformed output or violates the requested output limit; such executions fail locally rather than converting known cost into unknown cost.
+- Inference purpose is restricted consistently across application validation, JSON Schema and PostgreSQL to `PRIMARY_INFERENCE` / `AUXILIARY_INFERENCE`.
+- Temperature input is validated before execution creation.
+- P1.2 documentation now records the actual successful final-head PostgreSQL 16 CI instead of leaving verification as pending.
+
+### Verification order
+- Final diff must first be checked against V3 design semantics and module ownership.
+- Only after design conformance is confirmed is final-head CI used as acceptance evidence.
+
+## P1.2 minimum M06 gateway
 
 ### Added
 - `gateway.*` PostgreSQL domain for capability descriptors, connector configs, environment credential references, executions, attempts/provider requests, usage receipts and reconciliation jobs.
@@ -14,8 +29,8 @@
 - PostgreSQL integration tests using a controlled OpenAI-compatible HTTP provider fixture.
 
 ### Verification boundary
-- The adapter protocol must pass final-head PR CI before this slice is marked VERIFIED.
-- No real cloud or local model is claimed as verified by this change. Registered descriptors default to `UNVERIFIED`.
+- Final PR #6 head `98cbdc41d5172bdbbe17a3f24abeca839a269b2d` passed PostgreSQL 16 CI run `35056015615` before merge; the minimum M06 protocol slice is VERIFIED against that controlled test environment.
+- No real cloud or local model is claimed as verified. Registered descriptors default to `UNVERIFIED` until a real endpoint is deliberately exercised.
 - Secret values are not persisted; only environment-variable credential references are stored.
 
 ## P1.1 foundation hardening
