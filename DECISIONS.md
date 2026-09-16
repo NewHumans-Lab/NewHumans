@@ -69,3 +69,13 @@ M06 records measured usage; M05 remains the only authority that turns a platform
 Status: Accepted · 2026-09-16
 
 Gateway connector rows may store the name of a server-side environment credential reference. Secret values are resolved only at dispatch time and never enter gateway tables, Action/Event payloads, browser configuration, usage receipts or returned execution results. A production credential vault may replace environment resolution later without changing the business contract.
+
+## ADR-015 — Every provider attempt revalidates current execution eligibility atomically
+Status: Accepted · 2026-09-16
+
+Initial authorization is not a reusable license for later sends. Immediately before every provider attempt, including retries, M06 rechecks the current actor, current UTC billing date, charged activity fee, positive available Energy, descriptor/connector availability and platform reservation. Those checks and creation of the `DISPATCHED` attempt/provider-request records occur in one short database transaction. Provider network I/O starts only after that transaction commits. This preserves current-state authority without violating ADR-011.
+
+## ADR-016 — Trustworthy measured usage is settled even when the result payload is unusable
+Status: Accepted · 2026-09-16
+
+Provider execution outcome and local result usability are separate facts. If a provider response contains trustworthy measured usage but the output is malformed or violates a requested result limit, M06 records the usage and asks M05 to settle the exact known charge, then marks the execution `FAILED`. `OUTCOME_UNKNOWN` is reserved for cases where execution/usage is materially uncertain; an unusable result does not erase a known cost.
