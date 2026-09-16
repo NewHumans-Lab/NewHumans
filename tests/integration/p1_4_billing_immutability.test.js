@@ -63,7 +63,15 @@ test('descriptor pricing contract and accepted quote terms cannot drift in place
     (error) => error.code === '55000',
   );
   await assert.rejects(
+    () => pool.query(`UPDATE gateway.capability_descriptors SET created_at=created_at + interval '1 second' WHERE descriptor_id=$1`, [d1.descriptor_id]),
+    (error) => error.code === '55000',
+  );
+  await assert.rejects(
     () => pool.query(`UPDATE economy.resource_quotes SET max_cost_micro_e='999999' WHERE quote_id=$1`, [q1.quote_id]),
+    (error) => error.code === '55000',
+  );
+  await assert.rejects(
+    () => pool.query(`UPDATE economy.resource_quotes SET quote_id=$2 WHERE quote_id=$1`, [q1.quote_id, crypto.randomUUID()]),
     (error) => error.code === '55000',
   );
 
@@ -119,9 +127,27 @@ test('quote binding, execution authority and usage receipts are immutable eviden
     () => pool.query(`UPDATE gateway.executions SET quote_id=NULL WHERE execution_id=$1`, [execution.execution_id]),
     (error) => error.code === '55000',
   );
+  await assert.rejects(
+    () => pool.query(`UPDATE gateway.executions SET execution_id=$2 WHERE execution_id=$1`, [execution.execution_id, crypto.randomUUID()]),
+    (error) => error.code === '55000',
+  );
+  await assert.rejects(
+    () => pool.query(`UPDATE gateway.executions SET final_charge_micro_e=10 WHERE execution_id=$1`, [execution.execution_id]),
+    (error) => error.code === '55000',
+  );
 
   const attempt = (await pool.query(`INSERT INTO gateway.execution_attempts (world_id,execution_id,attempt_no,status) VALUES ($1,$2,1,'STARTED') RETURNING attempt_id`, [world, execution.execution_id])).rows[0];
   const receipt = (await pool.query(`INSERT INTO gateway.usage_receipts (world_id,execution_id,attempt_id,input_tokens,output_tokens,total_tokens,charge_micro_e,external_billing,status,raw_usage) VALUES ($1,$2,$3,4,3,7,10,false,'FINAL','{}'::jsonb) RETURNING receipt_id`, [world, execution.execution_id, attempt.attempt_id])).rows[0];
+
+  await pool.query(`UPDATE gateway.executions SET status='FAILED',final_charge_micro_e=10,completed_at=now() WHERE execution_id=$1`, [execution.execution_id]);
+  await assert.rejects(
+    () => pool.query(`UPDATE gateway.executions SET final_charge_micro_e=11 WHERE execution_id=$1`, [execution.execution_id]),
+    (error) => error.code === '55000',
+  );
+  await assert.rejects(
+    () => pool.query(`UPDATE gateway.executions SET final_charge_micro_e=NULL WHERE execution_id=$1`, [execution.execution_id]),
+    (error) => error.code === '55000',
+  );
 
   await assert.rejects(
     () => pool.query(`UPDATE gateway.usage_receipts SET charge_micro_e=11 WHERE receipt_id=$1`, [receipt.receipt_id]),
