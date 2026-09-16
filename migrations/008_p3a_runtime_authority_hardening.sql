@@ -48,8 +48,10 @@ ALTER TABLE runtime.model_change_events
     REFERENCES runtime.model_routes(world_id, agent_entity_id, route_id);
 
 -- Defense in depth for stale workers. The application also verifies worker_id, lease_epoch,
--- expiry, and expected state under row locks. PostgreSQL independently rejects any checkpoint
--- whose epoch is no longer current or whose state version does not advance exactly once.
+-- expiry, and expected state under row locks. PostgreSQL independently serializes and rejects
+-- any checkpoint whose epoch is no longer current or whose state version does not advance
+-- exactly once. A valid checkpoint advances the authoritative lifecycle version in the same
+-- transaction, so there is no second direct-SQL path that can leave checkpoint/state drift.
 CREATE OR REPLACE FUNCTION runtime.assert_checkpoint_fence() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   l runtime.runtime_leases%ROWTYPE;
@@ -57,7 +59,8 @@ DECLARE
 BEGIN
   SELECT * INTO l
     FROM runtime.runtime_leases
-   WHERE world_id=NEW.world_id AND activity_subject_id=NEW.activity_subject_id;
+   WHERE world_id=NEW.world_id AND activity_subject_id=NEW.activity_subject_id
+   FOR UPDATE;
   IF l.activity_subject_id IS NULL
      OR l.released_at IS NOT NULL
      OR l.expires_at <= now()
@@ -67,10 +70,15 @@ BEGIN
 
   SELECT * INTO s
     FROM runtime.lifecycle_states
-   WHERE world_id=NEW.world_id AND activity_subject_id=NEW.activity_subject_id;
+   WHERE world_id=NEW.world_id AND activity_subject_id=NEW.activity_subject_id
+   FOR UPDATE;
   IF s.activity_subject_id IS NULL OR NEW.state_version <> s.state_version + 1 THEN
     RAISE EXCEPTION 'checkpoint rejected by runtime state-version fence' USING ERRCODE='23514';
   END IF;
+
+  UPDATE runtime.lifecycle_states
+     SET state_version=NEW.state_version, updated_at=now()
+   WHERE world_id=NEW.world_id AND activity_subject_id=NEW.activity_subject_id;
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS runtime_checkpoints_fence ON runtime.runtime_checkpoints;
