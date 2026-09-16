@@ -1,6 +1,6 @@
 # P1.4.1 billing evidence immutability
 
-Status: **IMPLEMENTED; final verification pending**.
+Status: **VERIFIED**.
 
 A post-merge design review of P1.4 found that accepted resource quotes correctly stored pricing snapshots, but the referenced capability descriptor pricing/limit contract could still be edited in place at the database layer. M06 settlement reads the referenced descriptor rates, so an in-place edit after quote acceptance could change billing semantics despite the quote snapshot.
 
@@ -15,9 +15,15 @@ P1.4.1 closes that authority-layer gap without adding a second execution path:
 
 Operational state remains mutable where required: descriptors may still be disabled/enabled, verification metadata can evolve, executions can advance through runtime states, and quotes can advance through their valid lifecycle.
 
+## Verification evidence
+
+PR #12 implementation head `f042561c063f27335a8d7751a025d0cda8aec763` passed `P0-P1 CI` run `35070363734` (run #22) in the controlled PostgreSQL 16 environment. That run passed the mandatory `PERFECT_REPLACEMENT` audit, applied migrations `001` through `006` from an empty database, and passed the complete schema/syntax/unit/integration/regression test command including the new billing-immutability cases.
+
+The final PR head after this evidence documentation is required to pass the same workflow again before PR #12 is considered closed for acceptance.
+
 ## Acceptance
 
-Final PR acceptance requires:
+P1.4.1 acceptance requires:
 
 1. `PERFECT_REPLACEMENT` audit passes with concrete cleanup/regression evidence;
 2. empty PostgreSQL 16 migrations `001` through `006` apply cleanly;
@@ -26,4 +32,4 @@ Final PR acceptance requires:
 5. a new descriptor version can carry new pricing while an already accepted old quote retains its original terms;
 6. reservation/execution quote authority cannot be rebound;
 7. usage receipts reject UPDATE and DELETE;
-8. final documentation head remains green after verification evidence is recorded.
+8. the final documentation head remains green after verification evidence is recorded.
