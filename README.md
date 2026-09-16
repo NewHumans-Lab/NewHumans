@@ -6,11 +6,11 @@ The current design baseline is **V3 (2026-09-15)** and the protocol baseline is 
 
 ## Executable status
 
-**V3 P0/P1 through P1.4.1 are merged and verified as the foundation. P3-A M02 runtime-kernel foundations are implemented on the current feature branch and remain VERIFICATION PENDING until the final PR head passes PostgreSQL 16 CI.**
+**V3 P0/P1 through P1.4.1 are merged and verified as the foundation. P3-A M02 runtime-kernel foundations are implemented and the PR #14 implementation head is VERIFIED; the documentation-only final head must still remain green before PR acceptance is closed.**
 
 The verified foundation contains M01 Entity/Action/Event primitives, the minimum M05 Energy ledger plus authoritative resource quotes, and the minimum M06 OpenAI-compatible execution/usage/settlement chain with truthful cancellation and receipt lookup. P3-A adds M02-owned Agent runtime profiles, lifecycle authority, immutable model manifests, versioned model routes, fenced Worker leases/checkpoints and persistent goals without implementing an M03 substitute.
 
-P1.4 evidence includes PR #9 head `51ca987a29f645b81f1d9308a2c9fe7fa6df41ce` passing workflow run `35067780832` and merge commit `7912413cbb287c3e356d6a7adab31eee1ae010fd` passing main workflow run `35068834380`. P1.4.1 is part of the merged `main` baseline and seals descriptor/quote/execution billing evidence against in-place drift.
+P1.4 evidence includes PR #9 head `51ca987a29f645b81f1d9308a2c9fe7fa6df41ce` passing workflow run `35067780832` and merge commit `7912413cbb287c3e356d6a7adab31eee1ae010fd` passing main workflow run `35068834380`. P1.4.1 is part of the merged `main` baseline and seals descriptor/quote/execution billing evidence against in-place drift. P3-A PR #14 implementation head `f4d02495a56fea1390df5fbbeca7e17910e1c8c3` passed workflow run `35097607749`: replacement audit, empty PostgreSQL 16 migrations through `008`, schema/syntax checks, **14/14 unit tests** and **47/47 integration/regression tests** all passed.
 
 These controlled tests are **not** evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is deliberately exercised. Production authentication/credential vault also remain future work.
 
