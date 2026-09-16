@@ -6,9 +6,9 @@ The current design baseline is **V3 (2026-09-15)** and the protocol baseline is 
 
 ## Executable status
 
-**P0/P1 + P1.1 + the P1.2 minimum M06 gateway are implemented; P1.3 adds design-conformance hardening to the same minimum gateway.** The repository contains a Node.js modular monolith, PostgreSQL migrations, M01 Entity/Action/Event primitives, the minimum M05 Energy ledger, an OpenAI-compatible M06 execution/usage/settlement chain, a browser administration console, and automated unit/integration tests.
+**P0/P1 + P1.1 + the P1.2 minimum M06 gateway + P1.3 M06 design-conformance hardening are implemented and verified against controlled PostgreSQL 16 CI.** The repository contains a Node.js modular monolith, PostgreSQL migrations, M01 Entity/Action/Event primitives, the minimum M05 Energy ledger, an OpenAI-compatible M06 execution/usage/settlement chain, a browser administration console, and automated unit/integration tests.
 
-P1.2 is **VERIFIED** against its controlled PostgreSQL 16 CI environment: final PR #6 head `98cbdc41d5172bdbbe17a3f24abeca839a269b2d` passed workflow run `35056015615` before merge. P1.3 is **IMPLEMENTED with final-head verification pending** until its own PR CI passes after design review. Neither status is evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is deliberately exercised.
+P1.2 final PR #6 head `98cbdc41d5172bdbbe17a3f24abeca839a269b2d` passed workflow run `35056015615`. P1.3 implementation head `d6f2b7291240ad8ba4c48981d9b46ed45f6b3cec` passed workflow run `35057406551`: empty PostgreSQL 16 migrations `001`–`004`, schema/syntax checks, 8 unit tests and 30 integration/regression tests all passed. These are controlled implementation-verification results, **not** evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is deliberately exercised.
 
 This does **not** claim that M02 continuous Agent life/model routing, M03 Knowledge Ball, contracts/escrow, recovery/inheritance, or the 3D world are implemented.
 
