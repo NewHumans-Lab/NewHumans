@@ -6,9 +6,9 @@ The current design baseline is **V3 (2026-09-15)** and the protocol baseline is 
 
 ## Executable status
 
-**P0/P1 through P1.4 final contract closure are implemented on the P1.4 branch; final PostgreSQL 16 PR verification is the acceptance gate.** The executable slice contains M01 Entity/Action/Event primitives, the minimum M05 Energy ledger plus authoritative resource quotes, and the minimum M06 OpenAI-compatible execution/usage/settlement chain with cancellation and receipt lookup.
+**V3 P0/P1 through P1.4 final contract closure plus P1.4.1 billing-evidence hardening are implemented and verified against controlled PostgreSQL 16 CI.** The executable slice contains M01 Entity/Action/Event primitives, the minimum M05 Energy ledger plus authoritative resource quotes, and the minimum M06 OpenAI-compatible execution/usage/settlement chain with truthful cancellation and receipt lookup.
 
-Previously verified evidence remains valid: P1.2 final PR #6 head `98cbdc41d5172bdbbe17a3f24abeca839a269b2d` passed workflow run `35056015615`; P1.3 implementation head `d6f2b7291240ad8ba4c48981d9b46ed45f6b3cec` passed workflow run `35057406551`. P1.4 must additionally pass an empty PostgreSQL 16 migration through `005`, schema/syntax checks, all previous regressions and the new contract-closure tests before it is marked VERIFIED.
+Verification evidence includes P1.4 PR #9 head `51ca987a29f645b81f1d9308a2c9fe7fa6df41ce` passing workflow run `35067780832`, its merge commit `7912413cbb287c3e356d6a7adab31eee1ae010fd` passing main workflow run `35068834380`, and P1.4.1 PR #12 implementation head `f042561c063f27335a8d7751a025d0cda8aec763` passing run `35070363734` (run #22). The P1.4.1 run passed the mandatory `PERFECT_REPLACEMENT` audit, an empty PostgreSQL 16 migration through `006`, schema/syntax checks, and the full unit/integration/regression suite. The final documentation head is required to remain green before acceptance is closed.
 
 These controlled tests are **not** evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is deliberately exercised. Production authentication/credential vault also remain future work.
 
@@ -35,6 +35,7 @@ Implementation evidence:
 - [P1.2 minimum M06 gateway](docs/implementation/P1_2_M06_Gateway.md)
 - [P1.3 M06 design conformance](docs/implementation/P1_3_M06_Design_Conformance.md)
 - [P1.4 final contract closure](docs/implementation/P1_4_Final_Contract_Closure.md)
+- [P1.4.1 billing evidence immutability](docs/implementation/P1_4_1_Billing_Immutability.md)
 
 ## Start here
 
@@ -75,6 +76,8 @@ Common contracts and acceptance requirements:
 - A first activation requires at least `100 E` available and charges one `1 E` activity fee for that UTC day.
 - `100 E` becomes `99 E` after first activation and therefore cannot proactively seek work; `101 E` becomes `100 E` and can.
 - New platform-paid M06 inference uses an authoritative M05 quote and a quote-backed reservation before dispatch; execution, usage receipt and settlement retain that chain.
+- Versioned descriptor pricing/limits/retry semantics are immutable in place; changes require a new descriptor version, so an accepted quote cannot be silently repriced.
+- Accepted quote economic terms and reservation/execution billing bindings are immutable; usage receipts are append-only evidence.
 - Every provider send/retry rechecks current actor status, current UTC billing date, positive available Energy, route availability, quote and reservation before dispatch.
 - `max_retries` counts retries after the initial attempt: 0..3 means at most 1..4 total attempts.
 - M06 enforces declared input/output bounds; PRIMARY and AUXILIARY inference purposes are distinct machine/database values.
