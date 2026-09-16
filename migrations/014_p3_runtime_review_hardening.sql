@@ -115,14 +115,16 @@ CREATE TRIGGER model_routes_policy_guard
   FOR EACH ROW EXECUTE FUNCTION runtime.normalize_route_policy();
 
 -- Checkpoints must identify the immutable model route/manifest and exact goal
--- versions that produced recoverable work. Old checkpoints remain historical but
--- are explicitly LEGACY_UNSCOPED and cannot masquerade as authoritative recovery state.
+-- versions that produced recoverable work. Existing historical rows are explicitly
+-- LEGACY_UNSCOPED. A pre-route checkpoint may exist only with no pending external
+-- actions and is marked AUTHORITATIVE_PRE_ROUTE; once a route exists the immutable
+-- route/manifest/goal snapshot is mandatory and marked AUTHORITATIVE.
 ALTER TABLE runtime.runtime_checkpoints
   ADD COLUMN route_id uuid NULL,
   ADD COLUMN manifest_id uuid NULL,
   ADD COLUMN goal_refs jsonb NOT NULL DEFAULT '[]'::jsonb,
   ADD COLUMN recovery_authority_status text NOT NULL DEFAULT 'LEGACY_UNSCOPED'
-    CHECK (recovery_authority_status IN ('LEGACY_UNSCOPED','AUTHORITATIVE')),
+    CHECK (recovery_authority_status IN ('LEGACY_UNSCOPED','AUTHORITATIVE_PRE_ROUTE','AUTHORITATIVE')),
   ADD CONSTRAINT runtime_checkpoints_route_same_agent_fkey
     FOREIGN KEY (world_id, activity_subject_id, route_id)
     REFERENCES runtime.model_routes(world_id, agent_entity_id, route_id),
@@ -137,27 +139,9 @@ DECLARE
   ref jsonb;
   g record;
 BEGIN
-  SELECT current_route_id INTO current_route
-    FROM runtime.agent_profiles
-   WHERE world_id=NEW.world_id AND agent_entity_id=NEW.activity_subject_id;
-  IF current_route IS NULL THEN
-    RAISE EXCEPTION 'checkpoint requires a current model route' USING ERRCODE='23514';
+  IF jsonb_typeof(COALESCE(NEW.pending_actions,'[]'::jsonb)) <> 'array' THEN
+    RAISE EXCEPTION 'checkpoint pending_actions must be an array' USING ERRCODE='23514';
   END IF;
-  SELECT manifest_id INTO route_manifest
-    FROM runtime.model_routes
-   WHERE world_id=NEW.world_id AND agent_entity_id=NEW.activity_subject_id AND route_id=current_route;
-  IF route_manifest IS NULL THEN
-    RAISE EXCEPTION 'checkpoint current route is not authoritative for subject' USING ERRCODE='23514';
-  END IF;
-  IF NEW.route_id IS NOT NULL AND NEW.route_id <> current_route THEN
-    RAISE EXCEPTION 'checkpoint route reference is stale' USING ERRCODE='23514';
-  END IF;
-  IF NEW.manifest_id IS NOT NULL AND NEW.manifest_id <> route_manifest THEN
-    RAISE EXCEPTION 'checkpoint manifest reference does not match route' USING ERRCODE='23514';
-  END IF;
-  NEW.route_id := current_route;
-  NEW.manifest_id := route_manifest;
-
   IF NEW.goal_refs IS NULL OR NEW.goal_refs = '[]'::jsonb THEN
     SELECT COALESCE(jsonb_agg(jsonb_build_object('goal_id',goal_id,'version',version) ORDER BY created_at,goal_id),'[]'::jsonb)
       INTO NEW.goal_refs
@@ -185,6 +169,34 @@ BEGIN
       RAISE EXCEPTION 'checkpoint goal_refs must not contain duplicates' USING ERRCODE='23514';
     END IF;
   END IF;
+
+  SELECT current_route_id INTO current_route
+    FROM runtime.agent_profiles
+   WHERE world_id=NEW.world_id AND agent_entity_id=NEW.activity_subject_id;
+  IF current_route IS NULL THEN
+    IF jsonb_array_length(NEW.pending_actions) <> 0 THEN
+      RAISE EXCEPTION 'checkpoint with pending actions requires a current model route' USING ERRCODE='23514';
+    END IF;
+    NEW.route_id := NULL;
+    NEW.manifest_id := NULL;
+    NEW.recovery_authority_status := 'AUTHORITATIVE_PRE_ROUTE';
+    RETURN NEW;
+  END IF;
+
+  SELECT manifest_id INTO route_manifest
+    FROM runtime.model_routes
+   WHERE world_id=NEW.world_id AND agent_entity_id=NEW.activity_subject_id AND route_id=current_route;
+  IF route_manifest IS NULL THEN
+    RAISE EXCEPTION 'checkpoint current route is not authoritative for subject' USING ERRCODE='23514';
+  END IF;
+  IF NEW.route_id IS NOT NULL AND NEW.route_id <> current_route THEN
+    RAISE EXCEPTION 'checkpoint route reference is stale' USING ERRCODE='23514';
+  END IF;
+  IF NEW.manifest_id IS NOT NULL AND NEW.manifest_id <> route_manifest THEN
+    RAISE EXCEPTION 'checkpoint manifest reference does not match route' USING ERRCODE='23514';
+  END IF;
+  NEW.route_id := current_route;
+  NEW.manifest_id := route_manifest;
   NEW.recovery_authority_status := 'AUTHORITATIVE';
   RETURN NEW;
 END $$;
