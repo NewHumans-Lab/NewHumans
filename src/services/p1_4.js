@@ -5,7 +5,7 @@ import { calculateUsageCharge, conservativeInputTokenUpperBound, infer, register
 
 function problem(code, message, status = 400) { return Object.assign(new Error(message), { code, status }); }
 function positiveInt(value, field) { if (!Number.isInteger(value) || value <= 0) throw problem('INVALID_QUOTE_INPUT', `${field} must be a positive integer`); return value; }
-function retries(value) { const v=value ?? 0; if(!Number.isInteger(v)||v<0||v>3) throw problem('INVALID_GATEWAY_INPUT','maxRetries must be 0..3'); return v; }
+function retries(value) { const v=value ?? 0; if(!Number.isInteger(v)||v<0||v>3)throw problem('INVALID_GATEWAY_INPUT','maxRetries must be 0..3'); return v; }
 async function assertSystem(client,worldId,actorEntityId){const a=await resolveActor(client,actorEntityId);if(a.world_id!==worldId)throw problem('WORLD_MISMATCH','actor belongs to a different world',403);if(a.entity_type!=='SYSTEM')throw problem('FORBIDDEN','gateway configuration requires SYSTEM actor',403);return a;}
 
 export async function registerDescriptorP14(client,input){
@@ -28,7 +28,28 @@ export async function registerDescriptorP14(client,input){
   return d;
 }
 
-export async function registerConnectorP14(client,input){ return registerConnector(client,input); }
+export async function registerConnectorP14(client,input){
+  if(!input.replacesConnectorId)return registerConnector(client,input);
+  await assertSystem(client,input.worldId,input.actorEntityId);
+  const prior=(await client.query(`SELECT connector_id,descriptor_id,connector_kind,billing_mode,base_url,credential_ref_id,enabled
+    FROM gateway.connector_configs WHERE world_id=$1 AND connector_id=$2 FOR UPDATE`,[input.worldId,input.replacesConnectorId])).rows[0];
+  if(!prior)throw problem('CONNECTOR_NOT_FOUND','connector to replace was not found',404);
+  if(!prior.enabled)throw problem('CONNECTOR_ALREADY_REPLACED','connector replacement source is already disabled',409);
+  if(input.descriptorId&&input.descriptorId!==prior.descriptor_id)throw problem('CONNECTOR_REPLACEMENT_SCOPE_MISMATCH','replacement must keep the same descriptor',409);
+  if(input.connectorKind&&input.connectorKind!==prior.connector_kind)throw problem('CONNECTOR_REPLACEMENT_SCOPE_MISMATCH','replacement must keep the same connector kind',409);
+  if(input.billingMode&&input.billingMode!==prior.billing_mode)throw problem('CONNECTOR_REPLACEMENT_SCOPE_MISMATCH','credential rotation must not change billing mode',409);
+  if(input.baseUrl&&new URL(input.baseUrl).toString()!==new URL(prior.base_url).toString())throw problem('CONNECTOR_REPLACEMENT_SCOPE_MISMATCH','credential rotation must keep the same endpoint',409);
+  await client.query(`UPDATE gateway.connector_configs SET enabled=false WHERE world_id=$1 AND connector_id=$2`,[input.worldId,prior.connector_id]);
+  const replacement=await registerConnector(client,{
+    ...input,
+    descriptorId:prior.descriptor_id,
+    connectorKind:prior.connector_kind,
+    billingMode:prior.billing_mode,
+    baseUrl:prior.base_url,
+  });
+  if(input.actionId)await appendEvent(client,{worldId:input.worldId,aggregateType:'GATEWAY_CONNECTOR',aggregateId:replacement.connector_id,eventType:'CONNECTOR_REPLACED',actorEntityId:input.actorEntityId,actionId:input.actionId,payload:{replacesConnectorId:prior.connector_id,reason:'CREDENTIAL_OR_EXECUTION_IDENTITY_ROTATION'}});
+  return{...replacement,replaces_connector_id:prior.connector_id};
+}
 
 export async function listDescriptorsP14(pool,{worldId,actorEntityId}){
   return withTransaction(pool,async(client)=>{const actor=await resolveActor(client,actorEntityId);if(actor.world_id!==worldId)throw problem('WORLD_MISMATCH','actor belongs to a different world',403);const r=await client.query(`SELECT d.descriptor_id,d.descriptor_key,d.version,d.model_reference,d.assurance_level,d.verification_status,d.status,d.max_input_tokens,d.max_output_tokens,d.timeout_ms,d.max_retries,d.supports_idempotency,d.supports_reconciliation,d.input_rate_micro_e_per_million,d.output_rate_micro_e_per_million,COALESCE(json_agg(json_build_object('connectorId',c.connector_id,'kind',c.connector_kind,'billingMode',c.billing_mode,'enabled',c.enabled)) FILTER (WHERE c.connector_id IS NOT NULL),'[]'::json) connectors FROM gateway.capability_descriptors d LEFT JOIN gateway.connector_configs c ON c.world_id=d.world_id AND c.descriptor_id=d.descriptor_id WHERE d.world_id=$1 GROUP BY d.descriptor_id ORDER BY d.created_at`,[worldId]);return r.rows;});
