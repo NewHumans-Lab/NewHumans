@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/runtime-execution-eligibility.schema.json",
+  "title": "M02 execution eligibility nh.v3.0",
+  "type": "object",
+  "required": ["world_id","activity_subject_id","life_status","execution_status","model_status","state_version","billing_date","daily_fee_paid","available_micro_e","restriction_flags","route_available","can_receive_inbound","can_respond_inbound","can_seek_tasks","can_autonomous_turn","reasons"],
+  "properties": {
+    "world_id": {"type":"string","minLength":1},
+    "activity_subject_id": {"type":"string","format":"uuid"},
+    "life_status": {"enum":["REGISTERED","ACTIVE","DORMANT","TERMINATED"]},
+    "execution_status": {"enum":["IDLE","RUNNABLE","RUNNING","WAITING","BLOCKED"]},
+    "model_status": {"enum":["AVAILABLE","TEMPORARILY_UNAVAILABLE","RETIRED","CONTINUITY_UNCERTAIN"]},
+    "state_version": {"anyOf":[{"type":"integer","minimum":1},{"type":"string","pattern":"^[1-9]\\d*$"}]},
+    "first_activated_at": {"type":["string","null"],"format":"date-time"},
+    "billing_date": {"type":"string","format":"date"},
+    "daily_fee_paid": {"type":"boolean"},
+    "available_micro_e": {"type":"string","pattern":"^-?\\d+$"},
+    "restriction_flags": {"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
+    "route_available": {"type":"boolean"},
+    "can_receive_inbound": {"type":"boolean"},
+    "can_respond_inbound": {"type":"boolean"},
+    "can_seek_tasks": {"type":"boolean"},
+    "can_autonomous_turn": {"type":"boolean"},
+    "reasons": {"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true}
+  },
+  "additionalProperties": false
+}
