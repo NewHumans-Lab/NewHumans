@@ -6,11 +6,13 @@ The current design baseline is **V3 (2026-09-15)** and the protocol baseline is 
 
 ## Executable status
 
-**P0 + P1 are now implemented as the first executable foundation slice.** The repository contains a Node.js modular monolith, PostgreSQL migrations, M01 Entity/Action/Event primitives, the minimum M05 Energy ledger, a small browser administration console, and automated unit/integration tests.
+**P0/P1 + P1.1 + the P1.2 minimum M06 gateway are implemented.** The repository contains a Node.js modular monolith, PostgreSQL migrations, M01 Entity/Action/Event primitives, the minimum M05 Energy ledger, an OpenAI-compatible M06 execution/usage/settlement chain, a browser administration console, and automated unit/integration tests.
 
-This does **not** claim that M02 continuous Agent life, model adapters/token settlement, Knowledge Ball integration, contracts/escrow, recovery/inheritance, or the 3D world are implemented.
+P1.2 verification is not inferred from implementation: the final PR head must pass PostgreSQL 16 CI before this slice is marked VERIFIED. The CI provider is a controlled HTTP fixture, not evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is exercised.
 
-### Run P0/P1
+This does **not** claim that M02 continuous Agent life/model routing, M03 Knowledge Ball, contracts/escrow, recovery/inheritance, or the 3D world are implemented.
+
+### Run the executable foundation
 
 Prerequisites: Node.js 22+ and PostgreSQL 16+.
 
@@ -23,14 +25,18 @@ npm test
 LOCAL_DEV_BOOTSTRAP=true npm start
 ```
 
-Then open `http://localhost:3000`. More detail: [P0/P1 implementation baseline](docs/implementation/P0_P1_Foundation.md).
+Then open `http://localhost:3000`.
+
+Implementation evidence:
+
+- [P0/P1 implementation baseline](docs/implementation/P0_P1_Foundation.md)
+- [P1.2 minimum M06 gateway](docs/implementation/P1_2_M06_Gateway.md)
 
 ## Start here
 
 - [System specification V3](docs/NewHumans_System_Spec_V3.md)
 - [Modular development guide](docs/modules/00_Start_Here.md)
 - [V3 revision notes](docs/NewHumans_Revision_Notes_V3.md)
-- [P0/P1 implementation baseline](docs/implementation/P0_P1_Foundation.md)
 - [Architecture decisions](DECISIONS.md)
 - [Changelog](CHANGELOG.md)
 - [Machine-readable Energy policy](config/NewHumans_Energy_Policy_V3.json)
@@ -55,15 +61,19 @@ Common contracts and acceptance requirements:
 - [Integration and acceptance](docs/modules/09_Integration_and_Acceptance.md)
 - [Source coverage](docs/modules/10_Source_Coverage.md)
 
-## V3 rules enforced in P0/P1
+## V3 rules currently enforced by executable code
 
 - `1 E = 1,000,000 microE`; persisted/transmitted Energy never uses floating point.
 - Ordinary wallet posted balance cannot be negative; reservations reduce available balance but are not consumption.
+- Energy journals/postings are sealed append-only records; corrections require new records.
 - Mutations are action-idempotent. Same key + same payload replays; same key + different payload conflicts.
 - A first activation requires at least `100 E` available and charges one `1 E` activity fee for that UTC day.
 - `100 E` becomes `99 E` after first activation and therefore cannot proactively seek work; `101 E` becomes `100 E` and can.
-- The daily activity fee has one unique record per `(world_id, activity_subject_id, billing_date)`.
-- A fully dormant runtime is still a future M02 concern; P0/P1 does not manufacture an ACTIVE/DORMANT state machine.
+- A platform-paid M06 inference requires the charged activity day and a same-world active reservation; measured usage settles only the actual microE charge.
+- BYOK usage is recorded but the external model cost is not charged again to the NewHumans Energy wallet.
+- Ambiguous external timeout becomes `OUTCOME_UNKNOWN`; its reservation is retained for reconciliation and replay does not redispatch.
+- Secrets are referenced by server-side environment-variable name and are not stored in gateway business tables/events.
+- A fully dormant runtime is still a future M02 concern; current accounting activation is not an ACTIVE/DORMANT life state machine.
 
 ## License
 

@@ -8,7 +8,7 @@ Implementation uses `nh.v3.0`. Core semantic changes require a new protocol vers
 ## ADR-002 — Modular monolith before microservices
 Status: Accepted
 
-P0/P1 uses one Node.js service and one PostgreSQL database with `core.*` and `economy.*` schemas. Cross-domain invariants remain transactional. Module ownership is preserved in schema and service boundaries without introducing distributed transactions.
+P0/P1 uses one Node.js service and one PostgreSQL database with module-owned schemas. Cross-domain invariants remain transactional. Module ownership is preserved in schema and service boundaries without introducing distributed transactions.
 
 ## ADR-003 — microE is the only persisted Energy amount
 Status: Accepted
@@ -33,7 +33,7 @@ Status: Accepted
 ## ADR-007 — Development bootstrap is never production authentication
 Status: Accepted
 
-`POST /api/v1/dev/bootstrap` is available only when `LOCAL_DEV_BOOTSTRAP=true` and `NODE_ENV != production`. Production identity verification is not simulated or claimed by P0/P1.
+`POST /api/v1/dev/bootstrap` is available only when `LOCAL_DEV_BOOTSTRAP=true` and `NODE_ENV != production`. Production identity verification is not simulated or claimed by the executable foundation.
 
 ## ADR-008 — World isolation is a database invariant
 Status: Accepted · 2026-09-16
@@ -48,4 +48,24 @@ Committed `economy.journals` and `economy.postings` cannot be updated or deleted
 ## ADR-010 — The canonical command contract is snake_case `nh.v3.0`
 Status: Accepted · 2026-09-16
 
-`schemas/command-envelope.schema.json` follows the authoritative Shared Contracts document: `schema_version`, `world_id`, `command_type`, `idempotency_key`, optional contract metadata and `payload`. The HTTP adapter constructs and validates this envelope from route/body/header inputs; authenticated actor identity remains server-bound and is never accepted from the command envelope.
+`schemas/command-envelope.schema.json` follows the authoritative Shared Contracts document. The HTTP adapter constructs and validates the envelope; authenticated actor identity remains server-bound and is never accepted from the command envelope.
+
+## ADR-011 — External model I/O never holds a database transaction open
+Status: Accepted · 2026-09-16
+
+M06 prepares and records an execution in a short transaction, commits, performs provider network I/O without database locks, then opens a new short transaction to record the result and settle M05. This prevents model latency from turning wallet/action rows into long-held locks.
+
+## ADR-012 — Ambiguous external outcomes preserve budget and prohibit automatic replay
+Status: Accepted · 2026-09-16
+
+A timeout or other ambiguous post-dispatch network failure becomes `OUTCOME_UNKNOWN`. M06 retains the active reservation and creates reconciliation work. Reusing the same action idempotency key returns the existing unknown outcome instead of sending a second provider request.
+
+## ADR-013 — M06 does not own money and BYOK is not double billed
+Status: Accepted · 2026-09-16
+
+M06 records measured usage; M05 remains the only authority that turns a platform-paid reservation into a `RESOURCE_CHARGE` journal. BYOK usage is marked `external_billing=true` with zero NewHumans model charge. Activity-day fees remain independent.
+
+## ADR-014 — Connector secrets are references, not gateway business data
+Status: Accepted · 2026-09-16
+
+Gateway connector rows may store the name of a server-side environment credential reference. Secret values are resolved only at dispatch time and never enter gateway tables, Action/Event payloads, browser configuration, usage receipts or returned execution results. A production credential vault may replace environment resolution later without changing the business contract.
