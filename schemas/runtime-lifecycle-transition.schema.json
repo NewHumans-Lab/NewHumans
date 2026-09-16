@@ -11,8 +11,8 @@
     "from_life_status": {"enum":["REGISTERED","ACTIVE","DORMANT","TERMINATED"]},
     "to_life_status": {"enum":["REGISTERED","ACTIVE","DORMANT","TERMINATED"]},
     "reason": {"type":"string","minLength":1,"maxLength":2000},
-    "billing_date": {"type":["string","null"],"format":"date"},
-    "state_version": {"type":["integer","string"],"minimum":1,"pattern":"^[1-9]\\d*$"},
+    "billing_date": {"anyOf":[{"type":"string","format":"date"},{"type":"null"}]},
+    "state_version": {"anyOf":[{"type":"integer","minimum":1},{"type":"string","pattern":"^[1-9]\\d*$"}]},
     "created_by": {"type":"string","format":"uuid"},
     "created_at": {"type":"string","format":"date-time"}
   },
