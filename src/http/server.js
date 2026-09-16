@@ -27,11 +27,28 @@ import {
   requestAutonomousTurn,
   saveRuntimeCheckpoint,
 } from '../services/runtime.js';
+import {
+  completeScheduledAction,
+  listRuntimeControlState,
+  pauseRuntime,
+  reconcileActiveRuntime,
+  scheduleAction,
+  setModelStatus,
+  setTrait,
+  updateGoal,
+} from '../services/runtime_control.js';
+import {
+  claimAutonomousScheduledAction,
+  getRuntimeEligibility,
+  resumeRuntime,
+  setRuntimeRestriction,
+} from '../services/runtime_policy.js';
+import { runDueWakeScheduledAction } from '../services/runtime_scheduler.js';
 import { actorFromRequest as actor, canonicalCommandFromRequest as canonicalCommand, trustedWorldFromRequest as trustedWorld } from './trusted-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, '../public');
-if (process.env.NODE_ENV === 'production') throw new Error('P3-A development auth adapter is not production authentication');
+if (process.env.NODE_ENV === 'production') throw new Error('P3-B development auth adapter is not production authentication');
 const pool = createPool();
 const port = Number(process.env.PORT || 3000);
 
@@ -40,7 +57,7 @@ async function body(req){const chunks=[];for await(const chunk of req)chunks.pus
 function utcDate(){return new Date().toISOString().slice(0,10)}
 
 async function api(req,res,url){
-  if(req.method==='GET'&&url.pathname==='/api/v1/health')return json(res,200,{ok:true,schemaVersion:'nh.v3.0',implementationSlice:'P3-A',implemented:['P0-contracts','M01-min','M05-min+quote','M06-min+cancel+receipt','M02-runtime-kernel'],deferred:['M03-context-provider','M02-autonomous-turn']});
+  if(req.method==='GET'&&url.pathname==='/api/v1/health')return json(res,200,{ok:true,schemaVersion:'nh.v3.0',implementationSlice:'P3-B',implemented:['P0-contracts','M01-min','M05-min+quote','M06-min+cancel+receipt','M02-runtime-kernel','M02-continuous-runtime-control'],deferred:['M03-context-provider','M02-autonomous-cognition']});
 
   if(req.method==='POST'&&url.pathname==='/api/v1/dev/bootstrap'){
     if(process.env.NODE_ENV==='production'||process.env.LOCAL_DEV_BOOTSTRAP!=='true')return json(res,404,{error:'NOT_FOUND'});
@@ -159,6 +176,16 @@ async function api(req,res,url){
     const worldId=trustedWorld(req);
     return json(res,200,await getAgentRuntime(pool,{worldId,agentEntityId:runtimeAgentMatch[1],actorEntityId:actor(req)}));
   }
+  const eligibilityMatch=url.pathname.match(/^\/api\/v1\/runtime\/agents\/([0-9a-f-]+)\/eligibility$/);
+  if(req.method==='GET'&&eligibilityMatch){
+    const worldId=trustedWorld(req),date=url.searchParams.get('billingDate')||utcDate();
+    return json(res,200,await withTransaction(pool,(client)=>getRuntimeEligibility(client,{worldId,agentEntityId:eligibilityMatch[1],billingDate:date,actorEntityId:actor(req)})));
+  }
+  const controlMatch=url.pathname.match(/^\/api\/v1\/runtime\/agents\/([0-9a-f-]+)\/control$/);
+  if(req.method==='GET'&&controlMatch){
+    const worldId=trustedWorld(req);
+    return json(res,200,await withTransaction(pool,(client)=>listRuntimeControlState(client,{worldId,agentEntityId:controlMatch[1],actorEntityId:actor(req)})));
+  }
   if(req.method==='POST'&&url.pathname==='/api/v1/runtime/manifests'){
     const input=await body(req),command=canonicalCommand(req,input,'runtime.register_model_manifest');
     const out=await runCommand(pool,command.run,(client,ctx)=>registerModelManifest(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
@@ -194,6 +221,71 @@ async function api(req,res,url){
     const out=await runCommand(pool,command.run,(client,ctx)=>createGoal(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
     return json(res,201,out);
   }
+  const goalUpdateMatch=url.pathname.match(/^\/api\/v1\/runtime\/goals\/([0-9a-f-]+)\/update$/);
+  if(req.method==='POST'&&goalUpdateMatch){
+    const input=await body(req);input.goalId=goalUpdateMatch[1];
+    const command=canonicalCommand(req,input,'runtime.update_goal');
+    const out=await runCommand(pool,command.run,(client,ctx)=>updateGoal(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/lifecycle/resume'){
+    const input=await body(req);input.billingDate||=utcDate();
+    const command=canonicalCommand(req,input,'runtime.resume');
+    const out=await runCommand(pool,command.run,(client,ctx)=>resumeRuntime(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/lifecycle/pause'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.pause');
+    const out=await runCommand(pool,command.run,(client,ctx)=>pauseRuntime(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/lifecycle/reconcile'){
+    const input=await body(req);input.billingDate||=utcDate();
+    const command=canonicalCommand(req,input,'runtime.reconcile');
+    const out=await runCommand(pool,command.run,(client,ctx)=>reconcileActiveRuntime(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/restrictions'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.set_restriction');
+    const out=await runCommand(pool,command.run,(client,ctx)=>setRuntimeRestriction(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/model-status'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.set_model_status');
+    const out=await runCommand(pool,command.run,(client,ctx)=>setModelStatus(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/traits'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.set_trait');
+    const out=await runCommand(pool,command.run,(client,ctx)=>setTrait(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/schedules'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.schedule_action');
+    const out=await runCommand(pool,command.run,(client,ctx)=>scheduleAction(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,201,out);
+  }
+  const scheduleClaimMatch=url.pathname.match(/^\/api\/v1\/runtime\/schedules\/([0-9a-f-]+)\/claim$/);
+  if(req.method==='POST'&&scheduleClaimMatch){
+    const input=await body(req);input.scheduledActionId=scheduleClaimMatch[1];
+    const command=canonicalCommand(req,input,'runtime.claim_autonomous_schedule');
+    const out=await runCommand(pool,command.run,(client,ctx)=>claimAutonomousScheduledAction(client,{...command.data,actorEntityId:ctx.actor.entity_id}));
+    return json(res,200,out);
+  }
+  const scheduleCompleteMatch=url.pathname.match(/^\/api\/v1\/runtime\/schedules\/([0-9a-f-]+)\/complete$/);
+  if(req.method==='POST'&&scheduleCompleteMatch){
+    const input=await body(req);input.scheduledActionId=scheduleCompleteMatch[1];
+    const command=canonicalCommand(req,input,'runtime.complete_schedule');
+    const out=await runCommand(pool,command.run,(client,ctx)=>completeScheduledAction(client,{...command.data,actorEntityId:ctx.actor.entity_id}));
+    return json(res,200,out);
+  }
+  const scheduleWakeMatch=url.pathname.match(/^\/api\/v1\/runtime\/schedules\/([0-9a-f-]+)\/run-wake$/);
+  if(req.method==='POST'&&scheduleWakeMatch){
+    const input=await body(req);input.scheduledActionId=scheduleWakeMatch[1];input.billingDate||=utcDate();
+    const command=canonicalCommand(req,input,'runtime.run_scheduled_wake');
+    const out=await runCommand(pool,command.run,(client,ctx)=>runDueWakeScheduledAction(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
   if(req.method==='POST'&&url.pathname==='/api/v1/runtime/turns'){
     const input=await body(req),command=canonicalCommand(req,input,'runtime.request_turn');
     const out=await runCommand(pool,command.run,(client,ctx)=>requestAutonomousTurn(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
@@ -226,5 +318,5 @@ const server=http.createServer(async(req,res)=>{
     json(res,error.status||500,{error:error.code||'INTERNAL_ERROR',message:error.message,actionId:error.actionId||null});
   }
 });
-server.listen(port,()=>console.log(`NewHumans P3-A listening on :${port}`));
+server.listen(port,()=>console.log(`NewHumans P3-B listening on :${port}`));
 process.on('SIGTERM',async()=>{server.close();await pool.end()});
