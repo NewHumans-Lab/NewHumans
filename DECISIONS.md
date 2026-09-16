@@ -34,3 +34,18 @@ Status: Accepted
 Status: Accepted
 
 `POST /api/v1/dev/bootstrap` is available only when `LOCAL_DEV_BOOTSTRAP=true` and `NODE_ENV != production`. Production identity verification is not simulated or claimed by P0/P1.
+
+## ADR-008 — World isolation is a database invariant
+Status: Accepted · 2026-09-16
+
+Any table that stores both `world_id` and an Entity reference uses a composite foreign key to `(world_id, entity_id)`. Application checks remain useful error handling, but they are not the final authority for cross-world integrity. Ledger postings, which inherit world from their journal, use a database trigger to reject an Entity from another world.
+
+## ADR-009 — Energy journals are sealed append-only records
+Status: Accepted · 2026-09-16
+
+Committed `economy.journals` and `economy.postings` cannot be updated or deleted. A journal records its expected posting count; deferred database constraints require the final count to match and the signed sum to equal zero. Later balanced postings cannot be appended to an already committed journal. Corrections use a new `REVERSAL` journal referencing the original.
+
+## ADR-010 — The canonical command contract is snake_case `nh.v3.0`
+Status: Accepted · 2026-09-16
+
+`schemas/command-envelope.schema.json` follows the authoritative Shared Contracts document: `schema_version`, `world_id`, `command_type`, `idempotency_key`, optional contract metadata and `payload`. The HTTP adapter constructs and validates this envelope from route/body/header inputs; authenticated actor identity remains server-bound and is never accepted from the command envelope.
