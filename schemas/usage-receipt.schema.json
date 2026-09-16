@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/usage-receipt.schema.json",
+  "title": "M06 usage receipt nh.v3.0",
+  "type": "object",
+  "required": ["receipt_id", "world_id", "execution_id", "attempt_id", "input_tokens", "output_tokens", "total_tokens", "charge_micro_e", "external_billing", "status"],
+  "properties": {
+    "receipt_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "execution_id": { "type": "string", "format": "uuid" },
+    "attempt_id": { "type": "string", "format": "uuid" },
+    "provider_request_id": { "type": ["string", "null"] },
+    "input_tokens": { "type": "string", "pattern": "^\\d+$" },
+    "output_tokens": { "type": "string", "pattern": "^\\d+$" },
+    "total_tokens": { "type": "string", "pattern": "^\\d+$" },
+    "charge_micro_e": { "type": "string", "pattern": "^\\d+$" },
+    "external_billing": { "type": "boolean" },
+    "status": { "enum": ["FINAL", "ESTIMATED"] }
+  },
+  "additionalProperties": true
+}
