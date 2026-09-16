@@ -1,6 +1,26 @@
 # Changelog
 
-## Unreleased — P1.3 M06 design-conformance hardening
+## Unreleased — P1.4 final contract closure
+
+### Added
+- Authoritative M05 `resource_quotes` with `quote_id`, snapshotted descriptor/rate limits, maximum cost, expiry and quote lifecycle.
+- Quote-backed reservations and quote references on platform-paid M06 executions, completing `quote → reservation → execution → receipt → settlement`.
+- `gateway.cancel` for truthful pre-dispatch cancellation and budget release.
+- `gateway.get_usage_receipt` visibility-controlled receipt lookup.
+- Machine-readable resource-quote and gateway-descriptor schemas.
+- Contract-closure unit/integration tests for trusted world context, quote linkage, receipt lookup, cancellation and four-attempt retry semantics.
+
+### Changed
+- `world_id` is removed from the canonical command envelope and is bound through trusted server context; business payloads that try to supply a world are rejected.
+- The development HTTP adapter uses `x-nh-world-id` only as a production-blocked stand-in for trusted world context.
+- Descriptor retry configuration is `max_retries` 0..3; three retries means one initial attempt plus at most three retries (four total attempts).
+- New public platform-paid inference requires an explicit quote. Existing P1.3 internal calls remain grandfathered for upgrade compatibility rather than being silently reinterpreted.
+
+### Preserved
+- Pre-P1.4 Action payload hashes retain their trusted-world shape so upgraded retries do not spuriously conflict.
+- Existing P1.2/P1.3 internal descriptor/inference paths continue to work while new machine/HTTP surfaces use the P1.4 contract.
+
+## P1.3 M06 design-conformance hardening
 
 ### Fixed
 - `max_input_tokens` is now an enforced execution boundary instead of descriptor-only metadata; the generic OpenAI-compatible adapter uses a documented conservative pre-dispatch upper bound.
@@ -23,7 +43,7 @@
 - M05 reservation settlement with exact measured `RESOURCE_CHARGE` journals; unused reservation capacity is released by settlement.
 - BYOK usage receipts that do not double-charge the Energy wallet.
 - Explicit `OUTCOME_UNKNOWN` handling that retains reservation and creates reconciliation work.
-- Safe retry gate: provider idempotency required, stable provider idempotency key and maximum three attempts.
+- Legacy safe retry gate with provider idempotency, stable provider idempotency key and a descriptor attempt cap; P1.4 supersedes its naming with `max_retries`.
 - Gateway execution and usage receipt JSON Schemas.
 - Browser-console controls for gateway configuration, model-budget reservation and real endpoint inference.
 - PostgreSQL integration tests using a controlled OpenAI-compatible HTTP provider fixture.
