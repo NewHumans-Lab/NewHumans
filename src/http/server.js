@@ -15,11 +15,23 @@ import {
 } from '../services/economy.js';
 import { inspectExecution } from '../services/gateway.js';
 import { cancelExecution, getQuote, getUsageReceipt, inferQuoted, listDescriptorsP14, quoteResource, registerConnectorP14, registerDescriptorP14, reserveQuoted } from '../services/p1_4.js';
+import {
+  acquireRuntimeLease,
+  createGoal,
+  getAgentRuntime,
+  publishModelRoute,
+  registerAgentRuntime,
+  registerModelManifest,
+  releaseRuntimeLease,
+  renewRuntimeLease,
+  requestAutonomousTurn,
+  saveRuntimeCheckpoint,
+} from '../services/runtime.js';
 import { actorFromRequest as actor, canonicalCommandFromRequest as canonicalCommand, trustedWorldFromRequest as trustedWorld } from './trusted-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, '../public');
-if (process.env.NODE_ENV === 'production') throw new Error('P1.4 development auth adapter is not production authentication');
+if (process.env.NODE_ENV === 'production') throw new Error('P3-A development auth adapter is not production authentication');
 const pool = createPool();
 const port = Number(process.env.PORT || 3000);
 
@@ -28,7 +40,7 @@ async function body(req){const chunks=[];for await(const chunk of req)chunks.pus
 function utcDate(){return new Date().toISOString().slice(0,10)}
 
 async function api(req,res,url){
-  if(req.method==='GET'&&url.pathname==='/api/v1/health')return json(res,200,{ok:true,schemaVersion:'nh.v3.0',implementationSlice:'P1.4',implemented:['P0-contracts','M01-min','M05-min+quote','M06-min+cancel+receipt']});
+  if(req.method==='GET'&&url.pathname==='/api/v1/health')return json(res,200,{ok:true,schemaVersion:'nh.v3.0',implementationSlice:'P3-A',implemented:['P0-contracts','M01-min','M05-min+quote','M06-min+cancel+receipt','M02-runtime-kernel'],deferred:['M03-context-provider','M02-autonomous-turn']});
 
   if(req.method==='POST'&&url.pathname==='/api/v1/dev/bootstrap'){
     if(process.env.NODE_ENV==='production'||process.env.LOCAL_DEV_BOOTSTRAP!=='true')return json(res,404,{error:'NOT_FOUND'});
@@ -136,6 +148,57 @@ async function api(req,res,url){
     const worldId=trustedWorld(req);
     return json(res,200,await getUsageReceipt(pool,{worldId,receiptId:receiptMatch[1],actorEntityId:actor(req)}));
   }
+
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/agents'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.register_agent');
+    const out=await runCommand(pool,command.run,(client,ctx)=>registerAgentRuntime(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,201,out);
+  }
+  const runtimeAgentMatch=url.pathname.match(/^\/api\/v1\/runtime\/agents\/([0-9a-f-]+)$/);
+  if(req.method==='GET'&&runtimeAgentMatch){
+    const worldId=trustedWorld(req);
+    return json(res,200,await getAgentRuntime(pool,{worldId,agentEntityId:runtimeAgentMatch[1],actorEntityId:actor(req)}));
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/manifests'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.register_model_manifest');
+    const out=await runCommand(pool,command.run,(client,ctx)=>registerModelManifest(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,201,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/routes'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.publish_model_route');
+    const out=await runCommand(pool,command.run,(client,ctx)=>publishModelRoute(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,201,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/leases/acquire'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.acquire_lease');
+    const out=await runCommand(pool,command.run,(client,ctx)=>acquireRuntimeLease(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/leases/renew'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.renew_lease');
+    const out=await runCommand(pool,command.run,(client,ctx)=>renewRuntimeLease(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/leases/release'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.release_lease');
+    const out=await runCommand(pool,command.run,(client,ctx)=>releaseRuntimeLease(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/checkpoints'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.save_checkpoint');
+    const out=await runCommand(pool,command.run,(client,ctx)=>saveRuntimeCheckpoint(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,201,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/goals'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.create_goal');
+    const out=await runCommand(pool,command.run,(client,ctx)=>createGoal(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,201,out);
+  }
+  if(req.method==='POST'&&url.pathname==='/api/v1/runtime/turns'){
+    const input=await body(req),command=canonicalCommand(req,input,'runtime.request_turn');
+    const out=await runCommand(pool,command.run,(client,ctx)=>requestAutonomousTurn(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
+    return json(res,200,out);
+  }
   return false;
 }
 
@@ -163,5 +226,5 @@ const server=http.createServer(async(req,res)=>{
     json(res,error.status||500,{error:error.code||'INTERNAL_ERROR',message:error.message,actionId:error.actionId||null});
   }
 });
-server.listen(port,()=>console.log(`NewHumans P1.4 listening on :${port}`));
+server.listen(port,()=>console.log(`NewHumans P3-A listening on :${port}`));
 process.on('SIGTERM',async()=>{server.close();await pool.end()});
