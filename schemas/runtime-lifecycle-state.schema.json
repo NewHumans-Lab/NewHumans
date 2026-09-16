@@ -16,6 +16,8 @@
         { "type": "string", "pattern": "^[1-9]\\d*$" }
       ]
     },
+    "dormant_reason": { "type": ["string", "null"] },
+    "last_transition_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
   "additionalProperties": true
