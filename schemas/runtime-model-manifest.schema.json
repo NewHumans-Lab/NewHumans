@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/runtime-model-manifest.schema.json",
+  "title": "M02 immutable model manifest nh.v3.0",
+  "type": "object",
+  "required": ["manifest_id", "world_id", "agent_entity_id", "gateway_descriptor_id", "gateway_connector_id", "descriptor_version", "provider_protocol", "model_reference", "assurance_level", "verification_status", "connector_kind", "billing_mode", "prompt_version", "sampling_settings"],
+  "properties": {
+    "manifest_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "agent_entity_id": { "type": "string", "format": "uuid" },
+    "gateway_descriptor_id": { "type": "string", "format": "uuid" },
+    "gateway_connector_id": { "type": "string", "format": "uuid" },
+    "descriptor_version": { "type": "integer", "minimum": 1 },
+    "provider_protocol": { "enum": ["OPENAI_COMPATIBLE"] },
+    "model_reference": { "type": "string", "minLength": 1 },
+    "assurance_level": { "enum": ["ARTIFACT_VERIFIED", "PROVIDER_ATTESTED", "UNVERIFIED"] },
+    "verification_status": { "enum": ["UNVERIFIED", "PROTOCOL_TESTED", "REAL_PROVIDER_VERIFIED"] },
+    "connector_kind": { "enum": ["CLOUD", "LOCAL_SELF_HOSTED"] },
+    "billing_mode": { "enum": ["PLATFORM_PREPAID", "BYOK"] },
+    "prompt_version": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "sampling_settings": { "type": "object" },
+    "artifact_digest": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}
