@@ -3,12 +3,15 @@
   "$id": "https://newhumans.world/schemas/command-envelope.schema.json",
   "title": "NewHumans command envelope nh.v3.0",
   "type": "object",
-  "required": ["schemaVersion", "worldId", "actionType", "idempotencyKey", "payload"],
+  "required": ["schema_version", "world_id", "command_type", "idempotency_key", "payload"],
   "properties": {
-    "schemaVersion": { "const": "nh.v3.0" },
-    "worldId": { "type": "string", "minLength": 1 },
-    "actionType": { "type": "string", "minLength": 1 },
-    "idempotencyKey": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "schema_version": { "const": "nh.v3.0" },
+    "request_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "world_id": { "type": "string", "minLength": 1 },
+    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "command_type": { "type": "string", "minLength": 1 },
+    "expected_version": { "type": "integer", "minimum": 1 },
+    "on_behalf_of": { "type": ["string", "null"], "format": "uuid" },
     "payload": { "type": "object" }
   },
   "additionalProperties": false
