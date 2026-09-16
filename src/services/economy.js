@@ -17,13 +17,42 @@ async function lockWallet(client, worldId, entityId) {
   return row;
 }
 
+function postingSignature({ accountType, account_type, entityId, entity_id, systemAccount, system_account, amount, amount_micro_e }) {
+  return [
+    accountType ?? account_type,
+    entityId ?? entity_id ?? '',
+    systemAccount ?? system_account ?? '',
+    BigInt(amount ?? amount_micro_e).toString(),
+  ].join('|');
+}
+
+async function assertExistingJournalMatches(client, journalId, journalType, postings) {
+  const journal = await client.query('SELECT journal_type FROM economy.journals WHERE journal_id=$1', [journalId]);
+  const actualPostings = await client.query(
+    `SELECT account_type, entity_id, system_account, amount_micro_e
+       FROM economy.postings WHERE journal_id=$1 ORDER BY posting_id`,
+    [journalId],
+  );
+  const expected = postings.map(postingSignature).sort();
+  const actual = actualPostings.rows.map(postingSignature).sort();
+  if (journal.rows[0]?.journal_type !== journalType || expected.length !== actual.length || expected.some((value, index) => value !== actual[index])) {
+    throw Object.assign(new Error('ledger business key reused with different journal content'), { code: 'IDEMPOTENCY_CONFLICT', status: 409 });
+  }
+}
+
 async function createBalancedJournal(client, { worldId, businessKey, journalType, postings }) {
-  const existing = await client.query('SELECT journal_id FROM economy.journals WHERE world_id=$1 AND business_key=$2', [worldId, businessKey]);
-  if (existing.rowCount) return { journalId: existing.rows[0].journal_id, replayed: true };
   const journal = await client.query(
-    `INSERT INTO economy.journals (world_id, business_key, journal_type) VALUES ($1,$2,$3) RETURNING journal_id`,
+    `INSERT INTO economy.journals (world_id, business_key, journal_type)
+     VALUES ($1,$2,$3)
+     ON CONFLICT (world_id, business_key) DO NOTHING
+     RETURNING journal_id`,
     [worldId, businessKey, journalType],
   );
+  if (journal.rowCount === 0) {
+    const existing = await client.query('SELECT journal_id FROM economy.journals WHERE world_id=$1 AND business_key=$2', [worldId, businessKey]);
+    await assertExistingJournalMatches(client, existing.rows[0].journal_id, journalType, postings);
+    return { journalId: existing.rows[0].journal_id, replayed: true };
+  }
   for (const posting of postings) {
     await client.query(
       `INSERT INTO economy.postings (journal_id, account_type, entity_id, system_account, amount_micro_e)
@@ -88,7 +117,7 @@ export async function reserve(client, { worldId, entityId, amountMicroE, busines
     if (BigInt(existing.rows[0].amount_micro_e) !== amount || existing.rows[0].status !== 'ACTIVE') throw Object.assign(new Error('reservation idempotency conflict'), { code: 'IDEMPOTENCY_CONFLICT', status: 409 });
     return { reservationId: existing.rows[0].reservation_id, amountMicroE: amount.toString(), replayed: true };
   }
-  const result = await client.query(`INSERT INTO economy.reservations (world_id, entity_id, business_key, amount_micro_e, status) VALUES ($1,$2,$3,$4,'ACTIVE') RETURNING reservation_id`, [worldId, entityId, businessKey, amount.toString()]);
+  const result = await client.query(`INSERT INTO economy.reservations (world_id, entity_id, business_key, amount_micro_e, status) VALUES ($1,$2,$3,$4,'ACTIVE') RETURNING reservation_id`, [worldId, entityId,businessKey, amount.toString()]);
   await appendEvent(client, { worldId, aggregateType: 'WALLET', aggregateId: entityId, eventType: 'ENERGY_RESERVED', actorEntityId, actionId, payload: { reservationId: result.rows[0].reservation_id, amountMicroE: amount.toString(), businessKey } });
   return { reservationId: result.rows[0].reservation_id, amountMicroE: amount.toString(), replayed: false };
 }

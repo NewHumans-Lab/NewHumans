@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased — P0/P1 foundation
+## Unreleased — P1.1 foundation hardening
+
+### Added
+- Database-level composite `(world_id, entity_id)` foreign keys for world isolation.
+- Posting-world guard for ledger rows that inherit world from their journal.
+- Append-only protection for committed Energy journals and postings.
+- Sealed journal posting counts plus deferred balance/cardinality checks.
+- Canonical `nh.v3.0` command-envelope validation in the HTTP adapter.
+- JSON Schema compilation in the standard check pipeline.
+- Hardening tests for cross-world references, ledger immutability, journal sealing and business-key conflicts.
+
+### Fixed
+- Conflicting reuse of an Energy journal business key now returns `IDEMPOTENCY_CONFLICT` instead of silently replaying a journal with different content.
+- Machine-readable command field names now match the authoritative Shared Contracts document.
+
+## P0/P1 foundation
 
 ### Added
 - Node.js modular-monolith skeleton and PostgreSQL migration runner.
