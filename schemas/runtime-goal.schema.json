@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/runtime-goal.schema.json",
+  "title": "M02 persistent goal nh.v3.0",
+  "type": "object",
+  "required": ["goal_id", "world_id", "subject_id", "source", "goal_text", "priority", "success_evidence", "status", "version"],
+  "properties": {
+    "goal_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "subject_id": { "type": "string", "format": "uuid" },
+    "source": { "enum": ["SELF", "OWNER_DIRECTIVE", "CONTRACT_OBLIGATION", "SYSTEM_OBLIGATION"] },
+    "goal_text": { "type": "string", "minLength": 1, "maxLength": 10000 },
+    "priority": { "type": "integer" },
+    "rationale": { "type": ["string", "null"] },
+    "budget_micro_e": { "type": ["string", "null"], "pattern": "^\\d+$" },
+    "deadline": { "type": ["string", "null"], "format": "date-time" },
+    "parent_goal_id": { "type": ["string", "null"], "format": "uuid" },
+    "success_evidence": { "type": "object" },
+    "status": { "enum": ["PROPOSED", "ACTIVE", "PAUSED", "BLOCKED", "COMPLETED", "ABANDONED", "FAILED"] },
+    "version": {
+      "anyOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string", "pattern": "^[1-9]\\d*$" }
+      ]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

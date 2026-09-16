@@ -2,6 +2,12 @@
 
 These instructions apply to every development task in this repository.
 
+## Current owner sequencing
+
+Before choosing the next implementation slice, read [`docs/CURRENT_DEVELOPMENT_SEQUENCE.md`](docs/CURRENT_DEVELOPMENT_SEQUENCE.md). While that override is ACTIVE, M03 / Knowledge Ball remains deferred; only independently correct M02/later work may proceed, and no temporary M03, fake-memory, or production memoryless-cognition path may be introduced. If the next correct implementation requires unresolved M03 semantics, stop before code and return for owner discussion.
+
+This sequencing override changes development order only. It does not override V3 module ownership, data authority, identity, Energy, or interface semantics.
+
 ## Mandatory acceptance order
 
 For every implementation, fix, modification, refactor, migration or replacement, use this order:

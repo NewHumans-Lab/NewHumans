@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/runtime-lifecycle-state.schema.json",
+  "title": "M02 lifecycle state nh.v3.0",
+  "type": "object",
+  "required": ["life_status", "execution_status", "model_status", "restriction_flags", "archive_status", "state_version"],
+  "properties": {
+    "life_status": { "enum": ["REGISTERED", "ACTIVE", "DORMANT", "TERMINATED"] },
+    "execution_status": { "enum": ["IDLE", "RUNNABLE", "RUNNING", "WAITING", "BLOCKED"] },
+    "model_status": { "enum": ["AVAILABLE", "TEMPORARILY_UNAVAILABLE", "RETIRED", "CONTINUITY_UNCERTAIN"] },
+    "restriction_flags": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "archive_status": { "enum": ["HOT", "COLD"] },
+    "state_version": {
+      "anyOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string", "pattern": "^[1-9]\\d*$" }
+      ]
+    },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}
