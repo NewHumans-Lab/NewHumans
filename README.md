@@ -6,13 +6,13 @@ The current design baseline is **V3 (2026-09-15)** and the protocol baseline is 
 
 ## Executable status
 
-**V3 P0/P1 through P1.4.1 and P3-A are merged and verified. P3-B M02 continuous-runtime control-plane implementation is on the current feature branch and remains VERIFICATION PENDING until the PR final head passes PostgreSQL 16 CI.**
+**V3 P0/P1 through P1.4.1 and P3-A are merged and verified. P3-B M02 continuous-runtime control-plane implementation head is VERIFIED; the documentation-only final PR head must still pass the complete PostgreSQL 16 CI before PR acceptance is closed.**
 
 The verified foundation contains M01 Entity/Action/Event primitives, the minimum M05 Energy ledger plus authoritative resource quotes, the minimum M06 OpenAI-compatible execution/usage/settlement chain, and the P3-A M02 runtime kernel: Agent profiles, immutable model manifests, versioned routes, fenced Worker leases/checkpoints and persistent goals.
 
 P3-B adds the independently implementable M02 continuous-runtime control plane: ACTIVE/DORMANT lifecycle orchestration, current Energy/fee eligibility, trusted scheduler fee initiation, lifecycle transition evidence, goal revisions, trait state/update evidence, scheduled actions, safe higher-epoch Worker takeover, model/policy restriction handling and aligned HTTP/browser controls.
 
-P1.4 evidence includes PR #9 head `51ca987a29f645b81f1d9308a2c9fe7fa6df41ce` passing workflow run `35067780832` and merge commit `7912413cbb287c3e356d6a7adab31eee1ae010fd` passing main workflow run `35068834380`. P1.4.1 is part of the merged `main` baseline. P3-A PR #14 final head `4d4063290b1806a9976dfeac2e4fc68e88f2ce3f` passed final-head workflow run `35097815040` and was merged as `7f53208515bb95a270edfc231e04168c44877b4c`.
+P1.4 evidence includes PR #9 head `51ca987a29f645b81f1d9308a2c9fe7fa6df41ce` passing workflow run `35067780832` and merge commit `7912413cbb287c3e356d6a7adab31eee1ae010fd` passing main workflow run `35068834380`. P1.4.1 is part of the merged `main` baseline. P3-A PR #14 final head `4d4063290b1806a9976dfeac2e4fc68e88f2ce3f` passed final-head workflow run `35097815040` and was merged as `7f53208515bb95a270edfc231e04168c44877b4c`. P3-B implementation head `88cc08d60379e7ebad78cb4f75093d86cd7bb6d0` passed workflow run `35108741915`: replacement audit, empty PostgreSQL 16 migrations through `013`, strict schema/syntax checks, **14/14 unit tests** and **60/60 integration/regression tests** all passed.
 
 These controlled tests are **not** evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is deliberately exercised. Production authentication/credential vault also remain future work.
 
