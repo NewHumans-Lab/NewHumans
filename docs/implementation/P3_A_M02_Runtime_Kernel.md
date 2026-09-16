@@ -1,6 +1,6 @@
 # P3-A — M02 Runtime Kernel
 
-Status: **IMPLEMENTED; VERIFICATION PENDING PR FINAL-HEAD CI**  
+Status: **IMPLEMENTED and VERIFIED on PR #14 implementation head**  
 Protocol baseline: `nh.v3.0`  
 Owner sequencing: M03 / Knowledge Ball is deliberately deferred.
 
@@ -64,16 +64,22 @@ P3-A is mostly additive M02 functionality, but the design-conformance hardening 
 
 Historical rows remain as immutable evidence. No old executable alternative is retained.
 
-## Verification gate
+## Verification evidence
 
-Before this file may be changed to VERIFIED, the final PR head must pass:
+PR #14 implementation head `f4d02495a56fea1390df5fbbeca7e17910e1c8c3` passed workflow run `35097607749` on PostgreSQL 16.
 
-- empty PostgreSQL 16 migration through `008`;
-- all JSON Schema/JavaScript checks;
-- the complete prior P0/P1/P1.1/P1.2/P1.3/P1.4/P1.4.1 regression suite;
-- P3-A tests for runtime ownership, route history, credential-material rejection, lease concurrency, epoch/state fencing, goal source boundaries and M03 hard blocking;
-- authority tests for connector immutability, same-Agent composite references and direct-database checkpoint fencing;
-- repository `PERFECT_REPLACEMENT` CI audit.
+The run verified:
+
+- mandatory `PERFECT_REPLACEMENT` audit: **PASS** (`APPLICABLE` evidence accepted);
+- empty PostgreSQL 16 migration through `008`: **PASS**;
+- JavaScript syntax and all JSON Schema compilation: **PASS**;
+- unit tests: **14 / 14 PASS**;
+- integration/regression tests: **47 / 47 PASS**;
+- prior P0/P1/P1.1/P1.2/P1.3/P1.4/P1.4.1 regression coverage remained green;
+- P3-A runtime ownership, immutable route history, credential-material rejection, lease concurrency, stale epoch/state-version fencing, goal source boundaries and M03 hard blocking all executed and passed;
+- new authority tests for connector immutability, same-Agent composite references and direct-database checkpoint fencing all executed and passed.
+
+This evidence refers to the implementation head above. The documentation-only verification update creates a new PR head, which must also pass the complete CI workflow before final acceptance.
 
 ## Not claimed
 
