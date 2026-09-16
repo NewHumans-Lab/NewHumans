@@ -1,6 +1,8 @@
 # P1.2 minimum M06 gateway
 
-Status: **IMPLEMENTED** for the minimum execution gateway. Verification status is **PENDING the final-head PR CI**. Real cloud/self-hosted model connections remain **UNVERIFIED** until an actual endpoint and credential are exercised; CI protocol fixtures are not presented as a real model.
+Status: **IMPLEMENTED and VERIFIED** for the minimum execution gateway. The final PR #6 head `98cbdc41d5172bdbbe17a3f24abeca839a269b2d` passed PostgreSQL 16 CI (`P0-P1 CI` run `35056015615`) before merge. Real cloud/self-hosted model connections remain **UNVERIFIED** until an actual endpoint and credential are exercised; CI protocol fixtures are not presented as a real model.
+
+P1.3 subsequently performs a design-to-code conformance review and hardens semantics that P1.2 tests did not fully enforce. See [P1.3 M06 design conformance](P1_3_M06_Design_Conformance.md).
 
 ## Why this slice exists
 
@@ -82,9 +84,9 @@ Automatic retry is deliberately narrow in this first implementation:
 
 Production authentication is still not claimed by this repository slice; the existing development actor-header adapter remains production-blocked.
 
-## CI acceptance target
+## P1.2 CI evidence
 
-The PostgreSQL integration suite must prove:
+The final PR #6 PostgreSQL integration suite verified:
 
 1. successful platform-paid inference produces one provider dispatch, one usage receipt and an exact `RESOURCE_CHARGE` settlement;
 2. unused reservation capacity becomes available after settlement;
@@ -97,6 +99,8 @@ The PostgreSQL integration suite must prove:
 9. confirmed provider failure with trustworthy usage still settles actual usage;
 10. cross-world gateway references reject before dispatch;
 11. all earlier P0/P1/P1.1 tests remain part of the same CI command.
+
+The CI provider was a controlled local OpenAI-compatible HTTP fixture. This proves the implemented protocol/invariants, not the identity, weights, reliability or billing of any real external model provider.
 
 ## Still not implemented
 

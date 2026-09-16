@@ -8,6 +8,8 @@ const ONE_MILLION = 1_000_000n;
 const RETRYABLE_HTTP = new Set([408, 429, 500, 502, 503, 504]);
 const CONFIRMED_CONNECT_FAILURES = new Set(['ENOTFOUND', 'ECONNREFUSED']);
 const BLOCKED_CONNECTOR_HOSTS = new Set(['169.254.169.254', 'metadata.google.internal', 'metadata.google.internal.', '100.100.100.200']);
+const ACTION_PURPOSES = new Set(['PRIMARY_INFERENCE', 'AUXILIARY_INFERENCE']);
+const DISPATCH_BLOCK_CODES = new Set(['UNAUTHENTICATED','WORLD_MISMATCH','STALE_ACTIVITY_TICKET','DAILY_FEE_REQUIRED','NO_AVAILABLE_ENERGY','GATEWAY_NOT_AVAILABLE','INVALID_RESERVATION','RESERVATION_TOO_SMALL','EXECUTION_NOT_DISPATCHABLE']);
 
 function problem(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -59,6 +61,26 @@ function normalizeMessages(messages) {
     }
     return { role: message.role, content: message.content };
   });
+}
+
+export function conservativeInputTokenUpperBound(messages) {
+  const normalized = normalizeMessages(messages);
+  const bytes = Buffer.byteLength(JSON.stringify(normalized), 'utf8');
+  const bound = bytes + 32 + normalized.length * 16;
+  if (!Number.isSafeInteger(bound)) throw problem('MODEL_INPUT_LIMIT_EXCEEDED', 'input is too large to bound safely', 409);
+  return bound;
+}
+
+function normalizeTemperature(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 2) throw problem('INVALID_GATEWAY_INPUT', 'temperature must be a finite number between 0 and 2');
+  return value;
+}
+
+function normalizeActionPurpose(value) {
+  const purpose = value ?? 'PRIMARY_INFERENCE';
+  if (!ACTION_PURPOSES.has(purpose)) throw problem('INVALID_ACTION_PURPOSE', 'actionPurpose must be PRIMARY_INFERENCE or AUXILIARY_INFERENCE');
+  return purpose;
 }
 
 export function extractOpenAICompatibleUsage(payload) {
@@ -175,7 +197,7 @@ async function prepareExecution(pool, input) {
   return withTransaction(pool, async (client) => {
     const actor = await resolveActor(client, input.actorEntityId);
     if (actor.world_id !== input.worldId) throw problem('WORLD_MISMATCH', 'actor belongs to a different world', 403);
-    if (input.activitySubjectId !== input.actorEntityId || input.payerEntityId !== input.actorEntityId) throw problem('FORBIDDEN', 'P1.2 inference requires actor=activity subject=payer until delegation is implemented', 403);
+    if (input.activitySubjectId !== input.actorEntityId || input.payerEntityId !== input.actorEntityId) throw problem('FORBIDDEN', 'P1.3 inference requires actor=activity subject=payer until delegation is implemented', 403);
     const payloadHash = hashPayload(input.actionPayload);
     const inserted = await client.query(
       `INSERT INTO core.actions (world_id,actor_entity_id,action_type,idempotency_key,payload_hash,status)
@@ -198,13 +220,14 @@ async function prepareExecution(pool, input) {
     const actionId = inserted.rows[0].action_id;
     const plan = await loadExecutionPlan(client, input);
     const messages = normalizeMessages(input.messages);
+    const inputTokenUpperBound = conservativeInputTokenUpperBound(messages);
+    if (inputTokenUpperBound > Number(plan.max_input_tokens)) throw problem('MODEL_INPUT_LIMIT_EXCEEDED', `input conservative token bound ${inputTokenUpperBound} exceeds descriptor max_input_tokens ${plan.max_input_tokens}`, 409);
     const maxOutputTokens = input.maxOutputTokens ?? Number(plan.max_output_tokens);
     parsePositiveInt(maxOutputTokens, 'maxOutputTokens');
     if (maxOutputTokens > Number(plan.max_output_tokens)) throw problem('MODEL_LIMIT_EXCEEDED', 'maxOutputTokens exceeds descriptor limit', 409);
     const maxCharge = parseNonNegativeMicroE(input.maxChargeMicroE, 'maxChargeMicroE');
     if (plan.billing_mode === 'PLATFORM_PREPAID') {
-      const requestBytesUpperBound = BigInt(Buffer.byteLength(JSON.stringify({model:plan.model_reference,messages,max_tokens:maxOutputTokens}), 'utf8') + 64 + messages.length * 16);
-      const conservativeMaxCharge = calculateUsageCharge({inputTokens:requestBytesUpperBound,outputTokens:maxOutputTokens,inputRateMicroEPerMillion:plan.input_rate_micro_e_per_million,outputRateMicroEPerMillion:plan.output_rate_micro_e_per_million});
+      const conservativeMaxCharge = calculateUsageCharge({inputTokens:inputTokenUpperBound,outputTokens:maxOutputTokens,inputRateMicroEPerMillion:plan.input_rate_micro_e_per_million,outputRateMicroEPerMillion:plan.output_rate_micro_e_per_million});
       if (maxCharge < conservativeMaxCharge) throw problem('AUTHORIZATION_TOO_SMALL', `maxChargeMicroE must cover the conservative request bound of ${conservativeMaxCharge}`, 409);
     }
     const fee = await client.query(`SELECT status FROM economy.activity_fees WHERE world_id=$1 AND activity_subject_id=$2 AND billing_date=$3`, [input.worldId,input.activitySubjectId,input.billingDate]);
@@ -220,18 +243,42 @@ async function prepareExecution(pool, input) {
     const execution = await client.query(
       `INSERT INTO gateway.executions (world_id,action_id,activity_subject_id,payer_entity_id,descriptor_id,connector_id,reservation_id,billing_date,action_purpose,input_digest,max_charge_micro_e,status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'PROPOSED') RETURNING execution_id`,
-      [input.worldId,actionId,input.activitySubjectId,input.payerEntityId,input.descriptorId,input.connectorId,input.reservationId ?? null,input.billingDate,input.actionPurpose ?? 'PRIMARY_INFERENCE',hashPayload({messages,maxOutputTokens}),maxCharge.toString()],
+      [input.worldId,actionId,input.activitySubjectId,input.payerEntityId,input.descriptorId,input.connectorId,input.reservationId ?? null,input.billingDate,input.actionPurpose,hashPayload({messages,maxOutputTokens}),maxCharge.toString()],
     );
     const executionId = execution.rows[0].execution_id;
-    await appendEvent(client,{worldId:input.worldId,aggregateType:'GATEWAY_EXECUTION',aggregateId:executionId,eventType:'EXECUTION_PROPOSED',actorEntityId:input.actorEntityId,actionId,payload:{descriptorId:input.descriptorId,connectorId:input.connectorId,billingDate:input.billingDate}});
-    return { replayed:false, actionId, executionId, plan, messages, maxOutputTokens, maxCharge };
+    await appendEvent(client,{worldId:input.worldId,aggregateType:'GATEWAY_EXECUTION',aggregateId:executionId,eventType:'EXECUTION_PROPOSED',actorEntityId:input.actorEntityId,actionId,payload:{descriptorId:input.descriptorId,connectorId:input.connectorId,billingDate:input.billingDate,actionPurpose:input.actionPurpose,inputTokenUpperBound}});
+    return { replayed:false, actionId, executionId, plan, messages, maxOutputTokens, maxCharge, inputTokenUpperBound };
   });
 }
 
-async function markAttemptDispatched(pool, prepared, attemptNo) {
+async function assertDispatchEligibility(client, prepared, currentBillingDate) {
+  const actor = await resolveActor(client, prepared.actorEntityId);
+  if (actor.world_id !== prepared.worldId) throw problem('WORLD_MISMATCH', 'actor belongs to a different world', 403);
+  if (prepared.billingDate !== currentBillingDate) throw problem('STALE_ACTIVITY_TICKET', `billing date ${prepared.billingDate} is not current UTC date ${currentBillingDate}`, 409);
+  const fee = await client.query(`SELECT status FROM economy.activity_fees WHERE world_id=$1 AND activity_subject_id=$2 AND billing_date=$3`, [prepared.worldId,prepared.activitySubjectId,prepared.billingDate]);
+  if (fee.rowCount !== 1 || fee.rows[0].status !== 'CHARGED') throw problem('DAILY_FEE_REQUIRED', 'current activity fee is not charged', 409);
+  const wallet = await client.query(`SELECT available_micro_e FROM economy.wallet_balances WHERE world_id=$1 AND entity_id=$2`, [prepared.worldId,prepared.activitySubjectId]);
+  if (wallet.rowCount !== 1 || BigInt(wallet.rows[0].available_micro_e) <= 0n) throw problem('NO_AVAILABLE_ENERGY', 'activity subject has no positive available Energy', 409);
+  const route = await client.query(
+    `SELECT d.status AS descriptor_status,c.enabled,c.descriptor_id
+       FROM gateway.capability_descriptors d
+       JOIN gateway.connector_configs c ON c.world_id=d.world_id AND c.descriptor_id=d.descriptor_id
+      WHERE d.world_id=$1 AND d.descriptor_id=$2 AND c.connector_id=$3`,
+    [prepared.worldId,prepared.descriptorId,prepared.connectorId],
+  );
+  if (route.rowCount !== 1 || route.rows[0].descriptor_status !== 'ACTIVE' || !route.rows[0].enabled || route.rows[0].descriptor_id !== prepared.descriptorId) throw problem('GATEWAY_NOT_AVAILABLE', 'descriptor or connector is no longer active', 409);
+  if (prepared.plan.billing_mode === 'PLATFORM_PREPAID') {
+    const reservation = await client.query(`SELECT entity_id,amount_micro_e,status FROM economy.reservations WHERE world_id=$1 AND reservation_id=$2 FOR UPDATE`, [prepared.worldId,prepared.reservationId]);
+    if (reservation.rowCount !== 1 || reservation.rows[0].entity_id !== prepared.payerEntityId || reservation.rows[0].status !== 'ACTIVE') throw problem('INVALID_RESERVATION', 'reservation is no longer active for this payer', 409);
+    if (BigInt(reservation.rows[0].amount_micro_e) < prepared.maxCharge) throw problem('RESERVATION_TOO_SMALL', 'reservation no longer covers authorization', 409);
+  }
+}
+
+async function markAttemptDispatched(pool, prepared, attemptNo, currentBillingDate) {
   return withTransaction(pool, async (client) => {
     const current = await client.query(`SELECT status FROM gateway.executions WHERE world_id=$1 AND execution_id=$2 FOR UPDATE`, [prepared.worldId,prepared.executionId]);
     if (!current.rowCount || !['PROPOSED','DISPATCHED'].includes(current.rows[0].status)) throw problem('EXECUTION_NOT_DISPATCHABLE', 'execution cannot be dispatched', 409);
+    await assertDispatchEligibility(client, prepared, currentBillingDate);
     const attempt = await client.query(
       `INSERT INTO gateway.execution_attempts (world_id,execution_id,attempt_no,status) VALUES ($1,$2,$3,'STARTED') RETURNING attempt_id`,
       [prepared.worldId,prepared.executionId,attemptNo],
@@ -245,7 +292,7 @@ async function markAttemptDispatched(pool, prepared, attemptNo) {
     );
     await client.query(`UPDATE gateway.executions SET status='DISPATCHED' WHERE world_id=$1 AND execution_id=$2`, [prepared.worldId,prepared.executionId]);
     await client.query(`UPDATE core.actions SET status='DISPATCHED' WHERE world_id=$1 AND action_id=$2`, [prepared.worldId,prepared.actionId]);
-    await appendEvent(client,{worldId:prepared.worldId,aggregateType:'GATEWAY_EXECUTION',aggregateId:prepared.executionId,eventType:'EXECUTION_DISPATCHED',actorEntityId:prepared.actorEntityId,actionId:prepared.actionId,payload:{attemptNo}});
+    await appendEvent(client,{worldId:prepared.worldId,aggregateType:'GATEWAY_EXECUTION',aggregateId:prepared.executionId,eventType:'EXECUTION_DISPATCHED',actorEntityId:prepared.actorEntityId,actionId:prepared.actionId,payload:{attemptNo,billingDate:prepared.billingDate}});
     return { attemptId, providerIdempotencyKey };
   });
 }
@@ -285,18 +332,23 @@ async function finalizeSuccess(pool, prepared, attempt, { output, usage, provide
   });
 }
 
-async function finalizePreDispatchFailure(pool, prepared, { code, message }) {
+async function finalizeEligibilityFailure(pool, prepared, { code, message, dispatchedBefore = false }) {
   return withTransaction(pool, async (client) => {
     if (prepared.plan.billing_mode === 'PLATFORM_PREPAID' && prepared.reservationId) {
-      await releaseReservation(client,{worldId:prepared.worldId,entityId:prepared.payerEntityId,reservationId:prepared.reservationId,actorEntityId:prepared.actorEntityId,actionId:prepared.actionId});
+      const reservation = await client.query(`SELECT status FROM economy.reservations WHERE world_id=$1 AND entity_id=$2 AND reservation_id=$3`, [prepared.worldId,prepared.payerEntityId,prepared.reservationId]);
+      if (reservation.rows[0]?.status === 'ACTIVE') await releaseReservation(client,{worldId:prepared.worldId,entityId:prepared.payerEntityId,reservationId:prepared.reservationId,actorEntityId:prepared.actorEntityId,actionId:prepared.actionId});
     }
-    const result = {executionId:prepared.executionId,status:'FAILED',error:code,message};
+    const result = {executionId:prepared.executionId,status:'FAILED',error:code,message,dispatchedBefore};
     await client.query(`UPDATE gateway.executions SET status='FAILED',error_code=$3,result_json=$4::jsonb,completed_at=now() WHERE world_id=$1 AND execution_id=$2`, [prepared.worldId,prepared.executionId,code,JSON.stringify(result)]);
     await client.query(`UPDATE core.actions SET status='FAILED',error_code=$3,result_json=$4::jsonb,completed_at=now() WHERE world_id=$1 AND action_id=$2`, [prepared.worldId,prepared.actionId,code,JSON.stringify(result)]);
-    await appendEvent(client,{worldId:prepared.worldId,aggregateType:'GATEWAY_EXECUTION',aggregateId:prepared.executionId,eventType:'EXECUTION_FAILED',actorEntityId:prepared.actorEntityId,actionId:prepared.actionId,payload:{errorCode:code,dispatched:false}});
+    await appendEvent(client,{worldId:prepared.worldId,aggregateType:'GATEWAY_EXECUTION',aggregateId:prepared.executionId,eventType:'EXECUTION_FAILED',actorEntityId:prepared.actorEntityId,actionId:prepared.actionId,payload:{errorCode:code,dispatchedBefore}});
     await appendEvent(client,{worldId:prepared.worldId,aggregateType:'ACTION',aggregateId:prepared.actionId,eventType:'ACTION_FAILED',actorEntityId:prepared.actorEntityId,actionId:prepared.actionId,payload:{actionType:'gateway.infer',errorCode:code}});
     return result;
   });
+}
+
+async function finalizePreDispatchFailure(pool, prepared, input) {
+  return finalizeEligibilityFailure(pool,prepared,{...input,dispatchedBefore:false});
 }
 
 async function finalizeFailure(pool, prepared, attempt, { code, message, httpStatus = null, providerRequestId = null, usage = null }) {
@@ -304,7 +356,7 @@ async function finalizeFailure(pool, prepared, attempt, { code, message, httpSta
     let charge = 0n; let receiptId = null; let settlementJournalId = null;
     if (usage) {
       charge = prepared.plan.billing_mode === 'BYOK' ? 0n : calculateUsageCharge({inputTokens:usage.inputTokens,outputTokens:usage.outputTokens,inputRateMicroEPerMillion:prepared.plan.input_rate_micro_e_per_million,outputRateMicroEPerMillion:prepared.plan.output_rate_micro_e_per_million});
-      if (charge > prepared.maxCharge) throw problem('MEASURED_USAGE_EXCEEDS_AUTHORIZATION','failed provider response reported usage above the authorized maximum',409);
+      if (charge > prepared.maxCharge) throw problem('MEASURED_USAGE_EXCEEDS_AUTHORIZATION','provider response reported usage above the authorized maximum',409);
       if (prepared.plan.billing_mode === 'PLATFORM_PREPAID') {
         const settlement = await settleReservation(client,{worldId:prepared.worldId,entityId:prepared.payerEntityId,reservationId:prepared.reservationId,actualAmountMicroE:charge.toString(),businessKey:`gateway:${prepared.executionId}`,actorEntityId:prepared.actorEntityId,actionId:prepared.actionId});
         settlementJournalId = settlement.journalId;
@@ -343,18 +395,42 @@ function retryDelayMs(response, attemptNo) {
   return Math.min(100 * 2 ** (attemptNo - 1), 2_000);
 }
 
-export async function infer(pool, input, { fetchImpl = globalThis.fetch } = {}) {
+function currentUtcDate(nowValue) {
+  const date = nowValue instanceof Date ? nowValue : new Date(nowValue);
+  if (Number.isNaN(date.getTime())) throw problem('INVALID_CLOCK','clock returned an invalid date',500);
+  return date.toISOString().slice(0,10);
+}
+
+function usageChargeForPrepared(prepared, usage) {
+  return prepared.plan.billing_mode === 'BYOK' ? 0n : calculateUsageCharge({inputTokens:usage.inputTokens,outputTokens:usage.outputTokens,inputRateMicroEPerMillion:prepared.plan.input_rate_micro_e_per_million,outputRateMicroEPerMillion:prepared.plan.output_rate_micro_e_per_million});
+}
+
+function usageExceedsAuthorization(prepared, usage) {
+  return usageChargeForPrepared(prepared,usage) > prepared.maxCharge;
+}
+
+export async function infer(pool, input, { fetchImpl = globalThis.fetch, now = () => new Date() } = {}) {
   if (!input.idempotencyKey) throw problem('IDEMPOTENCY_KEY_REQUIRED', 'idempotency key is required');
-  const actionPayload = {descriptorId:input.descriptorId,connectorId:input.connectorId,activitySubjectId:input.activitySubjectId,payerEntityId:input.payerEntityId,reservationId:input.reservationId ?? null,billingDate:input.billingDate,actionPurpose:input.actionPurpose ?? 'PRIMARY_INFERENCE',messages:input.messages,maxOutputTokens:input.maxOutputTokens,maxChargeMicroE:input.maxChargeMicroE,temperature:input.temperature ?? null};
-  const preparedBase = await prepareExecution(pool,{...input,actionPayload});
+  const actionPurpose = normalizeActionPurpose(input.actionPurpose);
+  const temperature = normalizeTemperature(input.temperature);
+  const actionPayload = {descriptorId:input.descriptorId,connectorId:input.connectorId,activitySubjectId:input.activitySubjectId,payerEntityId:input.payerEntityId,reservationId:input.reservationId ?? null,billingDate:input.billingDate,actionPurpose,messages:input.messages,maxOutputTokens:input.maxOutputTokens,maxChargeMicroE:input.maxChargeMicroE,temperature};
+  const preparedBase = await prepareExecution(pool,{...input,actionPurpose,temperature,actionPayload});
   if (preparedBase.replayed) return preparedBase;
-  const prepared = {...preparedBase,worldId:input.worldId,actorEntityId:input.actorEntityId,activitySubjectId:input.activitySubjectId,payerEntityId:input.payerEntityId,reservationId:input.reservationId ?? null,billingDate:input.billingDate,providerBody:{model:preparedBase.plan.model_reference,messages:preparedBase.messages,max_tokens:preparedBase.maxOutputTokens,...(input.temperature === undefined ? {} : {temperature:input.temperature})}};
+  const prepared = {...preparedBase,worldId:input.worldId,actorEntityId:input.actorEntityId,activitySubjectId:input.activitySubjectId,payerEntityId:input.payerEntityId,reservationId:input.reservationId ?? null,billingDate:input.billingDate,descriptorId:input.descriptorId,connectorId:input.connectorId,actionPurpose,providerBody:{model:preparedBase.plan.model_reference,messages:preparedBase.messages,max_tokens:preparedBase.maxOutputTokens,...(temperature === null ? {} : {temperature})}};
   const endpoint = new URL('v1/chat/completions', validateConnectorBaseUrl(prepared.plan.base_url, prepared.plan.connector_kind));
-  const secret = prepared.plan.credential_env_key ? process.env[prepared.plan.credential_env_key] : null;
-  if (prepared.plan.credential_env_key && !secret) return finalizePreDispatchFailure(pool,prepared,{code:'CREDENTIAL_UNAVAILABLE',message:'configured credential environment variable is not available'});
   const allowedAttempts = prepared.plan.supports_idempotency ? Number(prepared.plan.max_attempts) : 1;
+  let attemptsDispatched = 0;
   for (let attemptNo = 1; attemptNo <= allowedAttempts; attemptNo += 1) {
-    const attempt = await markAttemptDispatched(pool,prepared,attemptNo);
+    const secret = prepared.plan.credential_env_key ? process.env[prepared.plan.credential_env_key] : null;
+    if (prepared.plan.credential_env_key && !secret) return finalizePreDispatchFailure(pool,prepared,{code:'CREDENTIAL_UNAVAILABLE',message:'configured credential environment variable is not available'});
+    let attempt;
+    try {
+      attempt = await markAttemptDispatched(pool,prepared,attemptNo,currentUtcDate(now()));
+    } catch (error) {
+      if (DISPATCH_BLOCK_CODES.has(error?.code)) return finalizeEligibilityFailure(pool,prepared,{code:error.code,message:error.message,dispatchedBefore:attemptsDispatched > 0});
+      throw error;
+    }
+    attemptsDispatched += 1;
     const headers = {'content-type':'application/json'};
     if (secret) headers.authorization = `Bearer ${secret}`;
     if (prepared.plan.supports_idempotency) headers['idempotency-key'] = attempt.providerIdempotencyKey;
@@ -374,9 +450,8 @@ export async function infer(pool, input, { fetchImpl = globalThis.fetch } = {}) 
     if (!response.ok) {
       let failureUsage = null;
       try { failureUsage = extractOpenAICompatibleUsage(payload); } catch {}
-      if (failureUsage && prepared.plan.billing_mode === 'PLATFORM_PREPAID') {
-        const failureCharge = calculateUsageCharge({inputTokens:failureUsage.inputTokens,outputTokens:failureUsage.outputTokens,inputRateMicroEPerMillion:prepared.plan.input_rate_micro_e_per_million,outputRateMicroEPerMillion:prepared.plan.output_rate_micro_e_per_million});
-        if (failureCharge > prepared.maxCharge) return finalizeUnknown(pool,prepared,attempt,{code:'MEASURED_USAGE_EXCEEDS_AUTHORIZATION',message:'failed provider response reported usage above the authorized maximum'});
+      if (failureUsage && prepared.plan.billing_mode === 'PLATFORM_PREPAID' && usageExceedsAuthorization(prepared,failureUsage)) {
+        return finalizeUnknown(pool,prepared,attempt,{code:'MEASURED_USAGE_EXCEEDS_AUTHORIZATION',message:'failed provider response reported usage above the authorized maximum'});
       }
       if (!failureUsage && RETRYABLE_HTTP.has(response.status) && prepared.plan.supports_idempotency && attemptNo < allowedAttempts) {
         await markRetryableFailure(pool,prepared,attempt,response.status,`HTTP_${response.status}`);
@@ -385,11 +460,21 @@ export async function infer(pool, input, { fetchImpl = globalThis.fetch } = {}) 
       }
       return finalizeFailure(pool,prepared,attempt,{code:`PROVIDER_HTTP_${response.status}`,message:'provider returned a confirmed error response',httpStatus:response.status,providerRequestId,usage:failureUsage});
     }
-    let usage; let output;
-    try { usage = extractOpenAICompatibleUsage(payload); output = extractOpenAICompatibleOutput(payload); }
-    catch (error) { return finalizeUnknown(pool,prepared,attempt,{code:error.code || 'PROVIDER_RESPONSE_UNVERIFIED',message:error.message}); }
-    const measuredCharge = prepared.plan.billing_mode === 'BYOK' ? 0n : calculateUsageCharge({inputTokens:usage.inputTokens,outputTokens:usage.outputTokens,inputRateMicroEPerMillion:prepared.plan.input_rate_micro_e_per_million,outputRateMicroEPerMillion:prepared.plan.output_rate_micro_e_per_million});
-    if (measuredCharge > prepared.maxCharge) return finalizeUnknown(pool,prepared,attempt,{code:'MEASURED_USAGE_EXCEEDS_AUTHORIZATION',message:'provider usage exceeds authorized maximum; reservation retained for reconciliation'});
+    let usage;
+    try { usage = extractOpenAICompatibleUsage(payload); }
+    catch (error) { return finalizeUnknown(pool,prepared,attempt,{code:error.code || 'USAGE_UNAVAILABLE',message:error.message}); }
+    if (usageExceedsAuthorization(prepared,usage)) return finalizeUnknown(pool,prepared,attempt,{code:'MEASURED_USAGE_EXCEEDS_AUTHORIZATION',message:'provider usage exceeds authorized maximum; reservation retained for reconciliation'});
+    if (usage.inputTokens > Number(prepared.plan.max_input_tokens)) {
+      return finalizeFailure(pool,prepared,attempt,{code:'PROVIDER_INPUT_LIMIT_EXCEEDED',message:'provider reported input usage above the descriptor limit',httpStatus:response.status,providerRequestId,usage});
+    }
+    if (usage.outputTokens > prepared.maxOutputTokens) {
+      return finalizeFailure(pool,prepared,attempt,{code:'PROVIDER_OUTPUT_LIMIT_EXCEEDED',message:'provider reported output usage above the requested maximum',httpStatus:response.status,providerRequestId,usage});
+    }
+    let output;
+    try { output = extractOpenAICompatibleOutput(payload); }
+    catch (error) {
+      return finalizeFailure(pool,prepared,attempt,{code:error.code || 'INVALID_PROVIDER_RESPONSE',message:error.message,httpStatus:response.status,providerRequestId,usage});
+    }
     return finalizeSuccess(pool,prepared,attempt,{output,usage,providerRequestId});
   }
   throw problem('GATEWAY_INTERNAL_ERROR','attempt loop exhausted',500);

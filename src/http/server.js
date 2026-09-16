@@ -10,7 +10,7 @@ import { buildCommandEnvelope, toRunCommand } from '../shared/contracts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, '../public');
-if (process.env.NODE_ENV === 'production') throw new Error('P1.2 development auth adapter is not production authentication');
+if (process.env.NODE_ENV === 'production') throw new Error('P1.3 development auth adapter is not production authentication');
 const pool = createPool(); const port = Number(process.env.PORT || 3000);
 function json(res,status,body){res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});res.end(JSON.stringify(body))}
 async function body(req){const chunks=[];for await(const chunk of req)chunks.push(chunk);return chunks.length?JSON.parse(Buffer.concat(chunks).toString('utf8')):{}}
@@ -22,7 +22,7 @@ function canonicalCommand(req,data,commandType){
 }
 
 async function api(req,res,url){
-  if(req.method==='GET'&&url.pathname==='/api/v1/health')return json(res,200,{ok:true,schemaVersion:'nh.v3.0',implemented:['M01-min','M05-min','M06-min']});
+  if(req.method==='GET'&&url.pathname==='/api/v1/health')return json(res,200,{ok:true,schemaVersion:'nh.v3.0',implementationSlice:'P1.3',implemented:['M01-min','M05-min','M06-min']});
   if(req.method==='POST'&&url.pathname==='/api/v1/dev/bootstrap'){
     if(process.env.NODE_ENV==='production'||process.env.LOCAL_DEV_BOOTSTRAP!=='true')return json(res,404,{error:'NOT_FOUND'});
     const data=await body(req),worldId=data.worldId||'local-dev';
@@ -79,4 +79,4 @@ async function api(req,res,url){
 }
 async function staticFile(req,res,url){if(req.method!=='GET')return false;const rel=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','styles.css'].includes(rel))return false;const content=await fs.readFile(path.join(publicDir,rel));const type=rel.endsWith('.html')?'text/html; charset=utf-8':rel.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8';res.writeHead(200,{'content-type':type});res.end(content);return true}
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,`http://${req.headers.host||'localhost'}`);if(url.pathname.startsWith('/api/')){const handled=await api(req,res,url);if(handled!==false)return;return json(res,404,{error:'NOT_FOUND'})}if(await staticFile(req,res,url))return;json(res,404,{error:'NOT_FOUND'})}catch(error){console.error(error);json(res,error.status||500,{error:error.code||'INTERNAL_ERROR',message:error.message,actionId:error.actionId||null})}});
-server.listen(port,()=>console.log(`NewHumans P1.2 listening on :${port}`)); process.on('SIGTERM',async()=>{server.close();await pool.end()});
+server.listen(port,()=>console.log(`NewHumans P1.3 listening on :${port}`)); process.on('SIGTERM',async()=>{server.close();await pool.end()});
