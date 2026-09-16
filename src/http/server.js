@@ -17,7 +17,9 @@ function actor(req){return req.headers['x-nh-actor-id']} function key(req){retur
 function canonicalCommand(req,data,commandType){
   const {worldId,...payload}=data;
   const envelope=buildCommandEnvelope({worldId,commandType,idempotencyKey:key(req),payload});
-  return {run:toRunCommand(envelope,actor(req)),data:{worldId:envelope.world_id,...envelope.payload}};
+  // Keep the P0/P1 Action payload hash based on the original HTTP body so an
+  // in-flight retry created before P1.1 remains replay-compatible after upgrade.
+  return {run:{...toRunCommand(envelope,actor(req)),payload:data},data:{worldId:envelope.world_id,...envelope.payload}};
 }
 
 async function api(req,res,url){
