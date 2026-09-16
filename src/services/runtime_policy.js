@@ -7,6 +7,17 @@ function problem(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
 }
 
+function positiveVersion(value, field) {
+  const text = String(value);
+  if (!/^[1-9]\d*$/.test(text)) throw problem('INVALID_RUNTIME_INPUT', `${field} must be a positive integer`);
+  return text;
+}
+
+function worker(value) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 200) throw problem('INVALID_RUNTIME_INPUT', 'workerId must be non-empty text up to 200 characters');
+  return value.trim();
+}
+
 async function systemActor(client, worldId, actorEntityId) {
   const actor = await resolveActor(client, actorEntityId);
   if (actor.world_id !== worldId) throw problem('WORLD_MISMATCH', 'actor belongs to a different world', 403);
@@ -39,6 +50,16 @@ async function assertQuiescent(client, worldId, subjectId, state) {
     [worldId, subjectId],
   )).rowCount === 1;
   if (activeLease) throw problem('RUNTIME_NOT_QUIESCENT', 'runtime has an active worker lease', 409);
+}
+
+async function bumpState(client, worldId, subjectId) {
+  const row = (await client.query(
+    `UPDATE runtime.lifecycle_states SET state_version=state_version+1,updated_at=now()
+      WHERE world_id=$1 AND activity_subject_id=$2 RETURNING state_version`,
+    [worldId, subjectId],
+  )).rows[0];
+  if (!row) throw problem('RUNTIME_STATE_NOT_FOUND', 'runtime lifecycle state not found', 404);
+  return row.state_version;
 }
 
 export async function getRuntimeEligibility(client, input) {
@@ -123,4 +144,52 @@ export async function claimAutonomousScheduledAction(client, input) {
   if (!row) throw problem('SCHEDULED_ACTION_NOT_FOUND', 'scheduled action not found', 404);
   if (row.action_kind !== 'AUTONOMOUS_TURN') throw problem('WRONG_SCHEDULE_PATH', 'WAKE schedules must use the atomic wake scheduler path', 409);
   return claimScheduledAction(client, input);
+}
+
+export async function recoverAutonomousScheduledClaim(client, {
+  worldId, scheduledActionId, workerId, leaseEpoch, actorEntityId, actionId,
+}) {
+  const actor = await systemActor(client, worldId, actorEntityId);
+  workerId = worker(workerId);
+  const epoch = positiveVersion(leaseEpoch, 'leaseEpoch');
+  const row = (await client.query(
+    `SELECT * FROM runtime.scheduled_actions WHERE world_id=$1 AND scheduled_action_id=$2 FOR UPDATE`,
+    [worldId, scheduledActionId],
+  )).rows[0];
+  if (!row) throw problem('SCHEDULED_ACTION_NOT_FOUND', 'scheduled action not found', 404);
+  if (row.action_kind !== 'AUTONOMOUS_TURN') throw problem('WRONG_SCHEDULE_PATH', 'only autonomous-turn claims are lease-recoverable', 409);
+  if (row.status !== 'CLAIMED') throw problem('SCHEDULED_ACTION_NOT_RECOVERABLE', `scheduled action is ${row.status}`, 409);
+
+  const lease = (await client.query(
+    `SELECT worker_id,lease_epoch,expires_at,released_at FROM runtime.runtime_leases
+      WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
+    [worldId, row.subject_id],
+  )).rows[0];
+  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || lease.released_at || new Date(lease.expires_at).getTime() <= Date.now()) {
+    throw problem('STALE_RUNTIME_LEASE', 'recovery worker does not hold the current active runtime lease', 409);
+  }
+  if (BigInt(epoch) <= BigInt(row.claimed_lease_epoch)) {
+    throw problem('CLAIM_TAKEOVER_NOT_NEWER', 'claim takeover requires a strictly newer lease epoch', 409);
+  }
+
+  const recovered = (await client.query(
+    `UPDATE runtime.scheduled_actions
+        SET claimed_by_worker=$3,claimed_lease_epoch=$4,claimed_at=now(),updated_at=now()
+      WHERE world_id=$1 AND scheduled_action_id=$2 RETURNING *`,
+    [worldId, scheduledActionId, workerId, epoch],
+  )).rows[0];
+  const stateVersion = await bumpState(client, worldId, row.subject_id);
+  if (actionId) await appendEvent(client, {
+    worldId, aggregateType: 'RUNTIME_AGENT', aggregateId: row.subject_id,
+    eventType: 'SCHEDULED_CLAIM_TAKEN_OVER', actorEntityId: actor.entity_id, actionId,
+    payload: {
+      scheduledActionId,
+      fromWorkerId: row.claimed_by_worker,
+      fromLeaseEpoch: row.claimed_lease_epoch,
+      toWorkerId: workerId,
+      toLeaseEpoch: epoch,
+      stateVersion,
+    },
+  });
+  return { ...recovered, state_version: stateVersion, recovery: true };
 }
