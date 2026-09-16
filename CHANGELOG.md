@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased — P1.1 foundation hardening
+## Unreleased — P1.2 minimum M06 gateway
+
+### Added
+- `gateway.*` PostgreSQL domain for capability descriptors, connector configs, environment credential references, executions, attempts/provider requests, usage receipts and reconciliation jobs.
+- OpenAI-compatible inference adapter shared by CLOUD and LOCAL_SELF_HOSTED connector classifications.
+- M05 reservation settlement with exact measured `RESOURCE_CHARGE` journals; unused reservation capacity is released by settlement.
+- BYOK usage receipts that do not double-charge the Energy wallet.
+- Explicit `OUTCOME_UNKNOWN` handling that retains reservation and creates reconciliation work.
+- Safe retry gate: provider idempotency required, stable provider idempotency key and maximum three attempts.
+- Gateway execution and usage receipt JSON Schemas.
+- Browser-console controls for gateway configuration, model-budget reservation and real endpoint inference.
+- PostgreSQL integration tests using a controlled OpenAI-compatible HTTP provider fixture.
+
+### Verification boundary
+- The adapter protocol must pass final-head PR CI before this slice is marked VERIFIED.
+- No real cloud or local model is claimed as verified by this change. Registered descriptors default to `UNVERIFIED`.
+- Secret values are not persisted; only environment-variable credential references are stored.
+
+## P1.1 foundation hardening
 
 ### Added
 - Database-level composite `(world_id, entity_id)` foreign keys for world isolation.
@@ -31,5 +49,4 @@
 - M02 Worker/runtime, leases, checkpoints or model switching.
 - M03 Knowledge Ball implementation.
 - M04 contracts/escrow/social graph.
-- M06 real model/tool adapters and token settlement.
 - 3D world or production identity provider.
