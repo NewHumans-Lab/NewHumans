@@ -14,7 +14,7 @@
     "connector_id": { "type": "string", "format": "uuid" },
     "reservation_id": { "type": ["string", "null"], "format": "uuid" },
     "billing_date": { "type": "string", "format": "date" },
-    "action_purpose": { "type": "string", "minLength": 1 },
+    "action_purpose": { "enum": ["PRIMARY_INFERENCE", "AUXILIARY_INFERENCE"] },
     "input_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "max_charge_micro_e": { "type": "string", "pattern": "^\\d+$" },
     "final_charge_micro_e": { "type": ["string", "null"], "pattern": "^\\d+$" },
