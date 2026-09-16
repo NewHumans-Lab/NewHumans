@@ -1,0 +1,71 @@
+{
+  "schema_version": "nh.v3.0",
+  "policy_id": "energy.activity.v3",
+  "status": "DESIGN_DEFAULT_NOT_IMPLEMENTED",
+  "asset": {
+    "code": "E",
+    "role": "DEFAULT_OFFICIAL_CURRENCY",
+    "micro_units_per_e": "1000000"
+  },
+  "first_activation": {
+    "minimum_available_micro_e": "100000000",
+    "default_owner_grant_micro_e": "100000000",
+    "inclusive": true,
+    "charge_activity_day_on_success": true
+  },
+  "daily_activity": {
+    "amount_micro_e": "1000000",
+    "timezone": "UTC",
+    "basis": "CALENDAR_DAY_WITH_ACTIVE_STATE",
+    "charge_on": "FIRST_ACTIVE_ENTRY_OR_ACTIVE_DAY_ROLLOVER",
+    "unique_key": [
+      "world_id",
+      "activity_subject_id",
+      "billing_date"
+    ],
+    "all_day_dormant_charge_micro_e": "0",
+    "refund_on_same_day_sleep": false,
+    "requires_positive_available_after_fee": true,
+    "arrears_allowed": false,
+    "settlement": "CONSUMPTION_REDEMPTION",
+    "token_included": false
+  },
+  "eligibility": {
+    "balance_basis": "POSTED_WALLET_MINUS_UNSETTLED_RESERVATIONS_MINUS_NONOVERLAPPING_FROZEN_AMOUNT",
+    "no_new_activity_at_or_below_micro_e": "0",
+    "task_seek_minimum_micro_e": "100000000",
+    "inbound_offer_with_positive_balance": true,
+    "unreleased_escrow_counts": false,
+    "reactivation_repeats_initial_100_e_requirement": false
+  },
+  "hpa": {
+    "included_as_billable_runtime": true,
+    "payer": "HUMAN_OWNED_DEDICATED_PROXY_BUDGET",
+    "long_term_memory_subject": "BOUND_HUMAN_ENTITY"
+  },
+  "recovery": {
+    "inactive_calendar_years_before_recovery": 2,
+    "additional_unverified_calendar_years_before_eligibility": 3,
+    "requires_funded_actual_activity": true
+  },
+  "visual": {
+    "default": "B_NOETIC_OCEAN",
+    "status": "PROVISIONAL_DEFAULT",
+    "personal_unknown_yellow_state": false,
+    "unresolved_challenge": "BLINK_OR_ACCESSIBLE_PERSISTENT_NOTICE"
+  },
+  "examples": [
+    {
+      "initial_micro_e": "100000000",
+      "daily_fee_micro_e": "1000000",
+      "after_fee_micro_e": "99000000",
+      "can_seek": false
+    },
+    {
+      "initial_micro_e": "101000000",
+      "daily_fee_micro_e": "1000000",
+      "after_fee_micro_e": "100000000",
+      "can_seek": true
+    }
+  ]
+}
