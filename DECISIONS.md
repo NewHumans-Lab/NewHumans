@@ -101,3 +101,10 @@ Status: Accepted · 2026-09-16
 Status: Accepted · 2026-09-16
 
 `gateway.cancel` may mark a `PROPOSED` execution `CANCELLED` and release its quote-backed reservation because no provider request has left the system. A `DISPATCHED` execution is not labelled cancelled merely because cancellation was requested; until a provider-specific cancellation protocol is implemented, the API returns that cancellation was not accepted and preserves the real execution state. Already terminal executions replay their terminal state.
+
+## ADR-021 — Accepted billing authority is immutable evidence
+Status: Accepted · 2026-09-16
+
+A versioned gateway descriptor is an execution and pricing contract. Its model reference, limits, retry semantics, idempotency/reconciliation capabilities and rates cannot be edited in place after creation; changes require a new descriptor version. This guarantees that an accepted resource quote continues to reference the same pricing semantics used by the single M06 execution path.
+
+Accepted resource-quote economic terms, reservation/execution quote bindings and execution billing scope are immutable after binding. Quote status may only advance through its valid lifecycle. Usage receipts are append-only evidence and cannot be updated or deleted. Operational state that does not rewrite historical billing meaning, such as enabling/disabling a descriptor or advancing execution status, remains mutable.
