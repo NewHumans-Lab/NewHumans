@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createPool, withTransaction } from '../db.js';
 import { createEntity, runCommand } from '../services/core.js';
 import { chargeDailyActivityFee, firstActivation, getWallet, mint, releaseReservation, reserve, transfer } from '../services/economy.js';
+import { buildCommandEnvelope, toRunCommand } from '../shared/contracts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, '../public');
@@ -13,6 +14,11 @@ const pool = createPool(); const port = Number(process.env.PORT || 3000);
 function json(res,status,body){res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store'});res.end(JSON.stringify(body))}
 async function body(req){const chunks=[];for await(const chunk of req)chunks.push(chunk);return chunks.length?JSON.parse(Buffer.concat(chunks).toString('utf8')):{}}
 function actor(req){return req.headers['x-nh-actor-id']} function key(req){return req.headers['idempotency-key']} function utcDate(){return new Date().toISOString().slice(0,10)}
+function canonicalCommand(req,data,commandType){
+  const {worldId,...payload}=data;
+  const envelope=buildCommandEnvelope({worldId,commandType,idempotencyKey:key(req),payload});
+  return {run:toRunCommand(envelope,actor(req)),data:{worldId:envelope.world_id,...envelope.payload}};
+}
 
 async function api(req,res,url){
   if(req.method==='GET'&&url.pathname==='/api/v1/health')return json(res,200,{ok:true,schemaVersion:'nh.v3.0'});
@@ -28,9 +34,10 @@ async function api(req,res,url){
     }); return json(res,200,result);
   }
   if(req.method==='POST'&&url.pathname==='/api/v1/entities'){
-    const data=await body(req),actorId=actor(req);
-    const out=await runCommand(pool,{worldId:data.worldId,actorEntityId:actorId,actionType:'core.create_entity',idempotencyKey:key(req),payload:data},async(client,ctx)=>{
+    const input=await body(req); const command=canonicalCommand(req,input,'core.create_entity');
+    const out=await runCommand(pool,command.run,async(client,ctx)=>{
       if(ctx.actor.entity_type!=='SYSTEM')throw Object.assign(new Error('entity creation requires SYSTEM actor in P1'),{code:'FORBIDDEN',status:403});
+      const data=command.data,actorId=ctx.actor.entity_id;
       return{entity:await createEntity(client,{worldId:data.worldId,entityType:data.entityType,displayId:data.displayId,name:data.name,createdBy:actorId,origin:'API'},{actorEntityId:actorId,actionId:ctx.actionId})};
     }); return json(res,201,out);
   }
@@ -41,9 +48,9 @@ async function api(req,res,url){
     '/api/v1/economy/reservations/release':['economy.release_reservation',releaseReservation], '/api/v1/economy/first-activation':['economy.first_activation',firstActivation], '/api/v1/economy/daily-fee':['economy.daily_fee',chargeDailyActivityFee]
   };
   if(req.method==='POST'&&commands[url.pathname]){
-    const data=await body(req),actorId=actor(req); if(url.pathname.endsWith('activation')||url.pathname.endsWith('daily-fee'))data.billingDate||=utcDate();
-    const[actionType,fn]=commands[url.pathname];
-    const out=await runCommand(pool,{worldId:data.worldId,actorEntityId:actorId,actionType,idempotencyKey:key(req),payload:data},(client,ctx)=>fn(client,{...data,actorEntityId:actorId,actionId:ctx.actionId}));
+    const input=await body(req); if(url.pathname.endsWith('activation')||url.pathname.endsWith('daily-fee'))input.billingDate||=utcDate();
+    const[actionType,fn]=commands[url.pathname]; const command=canonicalCommand(req,input,actionType);
+    const out=await runCommand(pool,command.run,(client,ctx)=>fn(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
     return json(res,url.pathname.endsWith('reservations')?201:200,out);
   }
   return false;
