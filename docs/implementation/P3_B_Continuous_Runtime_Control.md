@@ -1,6 +1,6 @@
 # P3-B — M02 Continuous Runtime Control Plane
 
-Status: **IMPLEMENTED; VERIFICATION PENDING PR FINAL-HEAD CI**  
+Status: **IMPLEMENTED; VERIFIED AGAINST CONTROLLED CI**  
 Protocol baseline: `nh.v3.0`  
 Owner sequencing: M03 / Knowledge Ball remains deliberately deferred.
 
@@ -132,27 +132,24 @@ The review explicitly checked:
 - M03 dependency blocking occurs before cognition side effects;
 - direct M05/M06 development diagnostics are not represented as Agent autonomous execution.
 
-## Verification gate
+## Verification evidence
 
-Before this file may be changed to VERIFIED, the PR final head must pass:
+The first complete implementation head was independently exercised by PR CI after the design review and replacement cleanup.
 
-- repository `PERFECT_REPLACEMENT` audit;
-- empty PostgreSQL 16 migration through `013`;
-- all JavaScript syntax and JSON Schema compilation checks;
-- the complete prior P0/P1/P1.1/P1.2/P1.3/P1.4/P1.4.1/P3-A regression suite;
-- P3-B tests for exact 99.999999 / 100 / 101 E activation boundaries;
-- same-day and cross-day fee behavior;
-- trusted SYSTEM versus unrelated Entity fee authority;
-- lifecycle restriction independence and model recovery;
-- goal revision/version semantics;
-- bounded trait authority and evidence guards;
-- schedule missed/block/claim/complete semantics;
-- WAKE single-path behavior;
-- M03 blocking before fee/provider side effects;
-- stale lease rejection and higher-epoch safe claim takeover;
-- direct-database authority tests for protected current-state paths.
+Verified implementation head: `88cc08d60379e7ebad78cb4f75093d86cd7bb6d0`  
+Workflow run: `35108741915`
 
-After the first green implementation head, verification evidence will be written into this document/README. That documentation-only final head must then pass the complete CI again.
+Evidence from that run:
+
+- repository `PERFECT_REPLACEMENT` audit: **PASS**;
+- empty PostgreSQL 16 migration `001` through `013`: **PASS**;
+- JavaScript syntax and strict JSON Schema compilation: **PASS**;
+- unit tests: **14 / 14 PASS**;
+- integration + regression tests: **60 / 60 PASS**;
+- complete prior P0/P1/P1.1/P1.2/P1.3/P1.4/P1.4.1/P3-A regression set remained green;
+- P3-B authority cases for active-state restrictions, trait evidence, schedule immutability, higher-epoch takeover, M03 pre-fee blocking, exact Energy thresholds, cross-day fees, model/restriction independence, goal revisions, WAKE single path and stale-worker fencing all executed and passed.
+
+This controlled CI verifies the P3-B control-plane implementation. It does **not** verify an adopted M03 provider or full autonomous cognition. This documentation update intentionally creates a new PR head; that final head must pass the complete CI again before PR acceptance is closed.
 
 ## Not claimed
 
