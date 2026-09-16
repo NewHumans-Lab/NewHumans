@@ -11,7 +11,7 @@
     "execution_status": {"enum":["IDLE","RUNNABLE","RUNNING","WAITING","BLOCKED"]},
     "model_status": {"enum":["AVAILABLE","TEMPORARILY_UNAVAILABLE","RETIRED","CONTINUITY_UNCERTAIN"]},
     "state_version": {"anyOf":[{"type":"integer","minimum":1},{"type":"string","pattern":"^[1-9]\\d*$"}]},
-    "first_activated_at": {"type":["string","null"],"format":"date-time"},
+    "first_activated_at": {"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},
     "billing_date": {"type":"string","format":"date"},
     "daily_fee_paid": {"type":"boolean"},
     "available_micro_e": {"type":"string","pattern":"^-?\\d+$"},
