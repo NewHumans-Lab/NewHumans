@@ -17,8 +17,8 @@ async function activate(agent,date='2026-09-16'){return runCommand(pool,{worldId
 async function reserveFor(agent,amount='1000000',key=crypto.randomUUID()){const out=await runCommand(pool,{worldId:agent.world_id,actorEntityId:agent.entity_id,actionType:'economy.reserve',idempotencyKey:`reserve-${key}`,payload:{amount,key}},(c,ctx)=>reserve(c,{worldId:agent.world_id,entityId:agent.entity_id,amountMicroE:amount,businessKey:key,actorEntityId:agent.entity_id,actionId:ctx.actionId}));return out.result.reservationId;}
 async function configure({baseUrl,billingMode='PLATFORM_PREPAID',supportsIdempotency=false,maxAttempts=1,timeoutMs=1000,credentialEnvKey=null,inputRate='1000000',outputRate='2000000'}={}){
   return withTransaction(pool,async(c)=>{
-    const descriptor=await registerDescriptor(c,{worldId,actorEntityId:system.entity_id,descriptorKey:`model-${crypto.randomUUID()}`,modelReference:'test-model',maxInputTokens:4096,maxOutputTokens:256,timeoutMs,maxAttempts,supportsIdempotency,inputRateMicroEPerMillion:inputRate,outputRateMicroEPerMillion:outputRate});
-    const connector=await registerConnector(c,{worldId,actorEntityId:system.entity_id,descriptorId:descriptor.descriptor_id,connectorKind:'LOCAL_SELF_HOSTED',billingMode,baseUrl,credentialEnvKey});
+    const descriptor=await registerDescriptor(c,{worldId:world,actorEntityId:system.entity_id,descriptorKey:`model-${crypto.randomUUID()}`,modelReference:'test-model',maxInputTokens:4096,maxOutputTokens:256,timeoutMs,maxAttempts,supportsIdempotency,inputRateMicroEPerMillion:inputRate,outputRateMicroEPerMillion:outputRate});
+    const connector=await registerConnector(c,{worldId:world,actorEntityId:system.entity_id,descriptorId:descriptor.descriptor_id,connectorKind:'LOCAL_SELF_HOSTED',billingMode,baseUrl,credentialEnvKey});
     return{descriptor,connector};
   });
 }
@@ -50,6 +50,24 @@ test('missing daily activity fee rejects before provider dispatch',async()=>{
   try{
     const {descriptor,connector}=await configure({baseUrl:p.baseUrl}); const agent=await entity('AGENT','no-fee'); await mintTo(agent,'110000000','no-fee-seed'); const reservationId=await reserveFor(agent);
     await assert.rejects(()=>infer(pool,{worldId:world,actorEntityId:agent.entity_id,idempotencyKey:'no-fee',descriptorId:descriptor.descriptor_id,connectorId:connector.connector_id,activitySubjectId:agent.entity_id,payerEntityId:agent.entity_id,reservationId,billingDate:'2026-09-16',messages:[{role:'user',content:'hello'}],maxOutputTokens:32,maxChargeMicroE:'1000000'}),e=>e.code==='DAILY_FEE_REQUIRED');
+    assert.equal(p.calls,0); assert.equal((await pool.query(`SELECT count(*)::int n FROM gateway.provider_requests`)).rows[0].n,0);
+  }finally{await p.close();}
+});
+
+test('invalid reservation rejects before provider dispatch',async()=>{
+  const p=await provider(async({res})=>success(res));
+  try{
+    const {descriptor,connector}=await configure({baseUrl:p.baseUrl}); const agent=await entity('AGENT','bad-reservation'); await mintTo(agent,'110000000','bad-reservation-seed'); await activate(agent);
+    await assert.rejects(()=>infer(pool,{worldId:world,actorEntityId:agent.entity_id,idempotencyKey:'bad-reservation',descriptorId:descriptor.descriptor_id,connectorId:connector.connector_id,activitySubjectId:agent.entity_id,payerEntityId:agent.entity_id,reservationId:crypto.randomUUID(),billingDate:'2026-09-16',messages:[{role:'user',content:'hello'}],maxOutputTokens:32,maxChargeMicroE:'1000000'}),e=>e.code==='INVALID_RESERVATION');
+    assert.equal(p.calls,0); assert.equal((await pool.query(`SELECT count(*)::int n FROM gateway.provider_requests`)).rows[0].n,0);
+  }finally{await p.close();}
+});
+
+test('platform max charge must cover conservative request bound before dispatch',async()=>{
+  const p=await provider(async({res})=>success(res));
+  try{
+    const {descriptor,connector}=await configure({baseUrl:p.baseUrl}); const agent=await entity('AGENT','small-auth'); await mintTo(agent,'110000000','small-auth-seed'); await activate(agent); const reservationId=await reserveFor(agent);
+    await assert.rejects(()=>infer(pool,{worldId:world,actorEntityId:agent.entity_id,idempotencyKey:'small-auth',descriptorId:descriptor.descriptor_id,connectorId:connector.connector_id,activitySubjectId:agent.entity_id,payerEntityId:agent.entity_id,reservationId,billingDate:'2026-09-16',messages:[{role:'user',content:'hello'}],maxOutputTokens:32,maxChargeMicroE:'1'}),e=>e.code==='AUTHORIZATION_TOO_SMALL');
     assert.equal(p.calls,0); assert.equal((await pool.query(`SELECT count(*)::int n FROM gateway.provider_requests`)).rows[0].n,0);
   }finally{await p.close();}
 });
