@@ -9,7 +9,7 @@
     "migrate": "node scripts/migrate.js",
     "check": "node scripts/check.js",
     "test:unit": "node --test tests/unit/*.test.js",
-    "test:integration": "node --test tests/integration/*.test.js",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.js",
     "test": "npm run check && npm run test:unit && npm run test:integration"
   },
   "dependencies": {
