@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/command-envelope.schema.json",
+  "title": "NewHumans command envelope nh.v3.0",
+  "type": "object",
+  "required": ["schemaVersion", "worldId", "actionType", "idempotencyKey", "payload"],
+  "properties": {
+    "schemaVersion": { "const": "nh.v3.0" },
+    "worldId": { "type": "string", "minLength": 1 },
+    "actionType": { "type": "string", "minLength": 1 },
+    "idempotencyKey": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}

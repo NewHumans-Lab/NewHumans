@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NewHumans P0/P1 Console</title><link rel="stylesheet" href="/styles.css"></head>
+<body><main><header><div><p class="eyebrow">nh.v3.0 · P0/P1</p><h1>NewHumans Foundation Console</h1></div><span id="health">checking…</span></header>
+<section class="notice">This console exposes only implemented P0/P1 capabilities. Worker life, model calls, contracts, Knowledge Ball and 3D world are intentionally absent.</section>
+<section class="grid"><article><h2>1 · Local bootstrap</h2><p>Creates a local SYSTEM + HUMAN identity. Development only; endpoint is disabled in production.</p><button id="bootstrap">Bootstrap local world</button><pre id="identity">No identity loaded.</pre></article>
+<article><h2>2 · Fund owner</h2><p>Mint 200 E to the local owner using the SYSTEM actor and a unique issuance basis.</p><button id="fund" disabled>Mint 200 E</button><pre id="ownerWallet">—</pre></article>
+<article><h2>3 · Create Agent</h2><p>Registers one AGENT Entity and its wallet without inventing a runtime or model.</p><button id="createAgent" disabled>Create Agent</button><pre id="agent">—</pre></article>
+<article><h2>4 · Transfer 100 E</h2><p>Owner funds the Agent through the same backend ledger used by the API.</p><button id="transfer" disabled>Transfer 100 E</button><pre id="agentWallet">—</pre></article>
+<article><h2>5 · First activation accounting</h2><p>Checks ≥100 E, charges exactly one 1 E activity fee for the UTC day, then reports task-seeking eligibility.</p><button id="activate" disabled>Charge first activation</button><pre id="activation">—</pre></article>
+<article><h2>Event / API evidence</h2><p>Every mutation uses an Idempotency-Key and produces Action/Event records server-side.</p><pre id="log">Ready.</pre></article></section>
+</main><script type="module" src="/app.js"></script></body></html>
