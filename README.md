@@ -6,9 +6,9 @@ The current design baseline is **V3 (2026-09-15)** and the protocol baseline is 
 
 ## Executable status
 
-**P0/P1 + P1.1 + the P1.2 minimum M06 gateway are implemented.** The repository contains a Node.js modular monolith, PostgreSQL migrations, M01 Entity/Action/Event primitives, the minimum M05 Energy ledger, an OpenAI-compatible M06 execution/usage/settlement chain, a browser administration console, and automated unit/integration tests.
+**P0/P1 + P1.1 + the P1.2 minimum M06 gateway are implemented; P1.3 adds design-conformance hardening to the same minimum gateway.** The repository contains a Node.js modular monolith, PostgreSQL migrations, M01 Entity/Action/Event primitives, the minimum M05 Energy ledger, an OpenAI-compatible M06 execution/usage/settlement chain, a browser administration console, and automated unit/integration tests.
 
-P1.2 verification is not inferred from implementation: the final PR head must pass PostgreSQL 16 CI before this slice is marked VERIFIED. The CI provider is a controlled HTTP fixture, not evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is exercised.
+P1.2 is **VERIFIED** against its controlled PostgreSQL 16 CI environment: final PR #6 head `98cbdc41d5172bdbbe17a3f24abeca839a269b2d` passed workflow run `35056015615` before merge. P1.3 is **IMPLEMENTED with final-head verification pending** until its own PR CI passes after design review. Neither status is evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is deliberately exercised.
 
 This does **not** claim that M02 continuous Agent life/model routing, M03 Knowledge Ball, contracts/escrow, recovery/inheritance, or the 3D world are implemented.
 
@@ -31,6 +31,7 @@ Implementation evidence:
 
 - [P0/P1 implementation baseline](docs/implementation/P0_P1_Foundation.md)
 - [P1.2 minimum M06 gateway](docs/implementation/P1_2_M06_Gateway.md)
+- [P1.3 M06 design conformance](docs/implementation/P1_3_M06_Design_Conformance.md)
 
 ## Start here
 
@@ -69,9 +70,11 @@ Common contracts and acceptance requirements:
 - Mutations are action-idempotent. Same key + same payload replays; same key + different payload conflicts.
 - A first activation requires at least `100 E` available and charges one `1 E` activity fee for that UTC day.
 - `100 E` becomes `99 E` after first activation and therefore cannot proactively seek work; `101 E` becomes `100 E` and can.
-- A platform-paid M06 inference requires the charged activity day and a same-world active reservation; measured usage settles only the actual microE charge.
+- A platform-paid M06 inference requires the charged current UTC activity day and a same-world active reservation; measured usage settles only the actual microE charge.
+- Every provider send/retry rechecks current actor status, current UTC billing date, positive available Energy, route availability and reservation before dispatch.
+- M06 enforces declared input/output bounds; PRIMARY and AUXILIARY inference purposes are distinct machine/database values.
 - BYOK usage is recorded but the external model cost is not charged again to the NewHumans Energy wallet.
-- Ambiguous external timeout becomes `OUTCOME_UNKNOWN`; its reservation is retained for reconciliation and replay does not redispatch.
+- Known provider usage remains billable even if the returned output is unusable; ambiguous external outcome remains `OUTCOME_UNKNOWN` and retains budget for reconciliation.
 - Secrets are referenced by server-side environment-variable name and are not stored in gateway business tables/events.
 - A fully dormant runtime is still a future M02 concern; current accounting activation is not an ACTIVE/DORMANT life state machine.
 
