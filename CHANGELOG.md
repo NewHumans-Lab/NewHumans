@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased — P1.4 final contract closure
+## Unreleased — P1.4.1 billing evidence immutability
+
+### Fixed
+- Versioned gateway descriptor pricing, limits, retry semantics and execution-contract fields can no longer be edited in place; changes require a new descriptor version.
+- Accepted resource-quote economic terms and expiry are immutable, preventing a valid quote from being silently repriced after acceptance.
+- Reservation/execution quote and billing-authority bindings cannot be rebound after creation.
+- Usage receipts are append-only evidence and reject UPDATE/DELETE.
+- Quote lifecycle transitions are constrained to valid forward states while legitimate descriptor/execution operational state remains mutable.
+
+### Verification
+- PR #12 implementation head `f042561c063f27335a8d7751a025d0cda8aec763` passed `P0-P1 CI` run `35070363734` (run #22): mandatory `PERFECT_REPLACEMENT` audit, empty PostgreSQL 16 migrations `001`–`006`, and the complete test suite all succeeded.
+- The final documentation head must remain green before the acceptance task is closed.
+
+## P1.4 final contract closure
 
 ### Added
 - Authoritative M05 `resource_quotes` with `quote_id`, snapshotted descriptor/rate limits, maximum cost, expiry and quote lifecycle.
