@@ -2,7 +2,9 @@
 
 CREATE OR REPLACE FUNCTION gateway.reject_descriptor_contract_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF OLD.descriptor_key IS DISTINCT FROM NEW.descriptor_key
+  IF OLD.descriptor_id IS DISTINCT FROM NEW.descriptor_id
+     OR OLD.world_id IS DISTINCT FROM NEW.world_id
+     OR OLD.descriptor_key IS DISTINCT FROM NEW.descriptor_key
      OR OLD.version IS DISTINCT FROM NEW.version
      OR OLD.capability_type IS DISTINCT FROM NEW.capability_type
      OR OLD.provider_protocol IS DISTINCT FROM NEW.provider_protocol
@@ -16,7 +18,8 @@ BEGIN
      OR OLD.supports_reconciliation IS DISTINCT FROM NEW.supports_reconciliation
      OR OLD.input_rate_micro_e_per_million IS DISTINCT FROM NEW.input_rate_micro_e_per_million
      OR OLD.output_rate_micro_e_per_million IS DISTINCT FROM NEW.output_rate_micro_e_per_million
-     OR OLD.created_by IS DISTINCT FROM NEW.created_by THEN
+     OR OLD.created_by IS DISTINCT FROM NEW.created_by
+     OR OLD.created_at IS DISTINCT FROM NEW.created_at THEN
     RAISE EXCEPTION 'capability descriptor contract fields are immutable; create a new descriptor version'
       USING ERRCODE='55000';
   END IF;
@@ -29,7 +32,8 @@ CREATE TRIGGER capability_descriptors_contract_immutable
 
 CREATE OR REPLACE FUNCTION economy.enforce_resource_quote_immutability() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF OLD.world_id IS DISTINCT FROM NEW.world_id
+  IF OLD.quote_id IS DISTINCT FROM NEW.quote_id
+     OR OLD.world_id IS DISTINCT FROM NEW.world_id
      OR OLD.payer_entity_id IS DISTINCT FROM NEW.payer_entity_id
      OR OLD.activity_subject_id IS DISTINCT FROM NEW.activity_subject_id
      OR OLD.resource_kind IS DISTINCT FROM NEW.resource_kind
@@ -73,7 +77,8 @@ CREATE TRIGGER reservations_quote_binding_immutable
 
 CREATE OR REPLACE FUNCTION gateway.reject_execution_authority_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF OLD.world_id IS DISTINCT FROM NEW.world_id
+  IF OLD.execution_id IS DISTINCT FROM NEW.execution_id
+     OR OLD.world_id IS DISTINCT FROM NEW.world_id
      OR OLD.action_id IS DISTINCT FROM NEW.action_id
      OR OLD.activity_subject_id IS DISTINCT FROM NEW.activity_subject_id
      OR OLD.payer_entity_id IS DISTINCT FROM NEW.payer_entity_id
@@ -87,6 +92,18 @@ BEGIN
      OR OLD.max_charge_micro_e IS DISTINCT FROM NEW.max_charge_micro_e
      OR OLD.created_at IS DISTINCT FROM NEW.created_at THEN
     RAISE EXCEPTION 'execution authority/billing scope is immutable after creation' USING ERRCODE='55000';
+  END IF;
+
+  -- The measured charge is assigned once when an execution first resolves to a
+  -- determined billed outcome. It cannot be introduced on a still-live row,
+  -- cleared, or rewritten after a terminal determination.
+  IF OLD.final_charge_micro_e IS DISTINCT FROM NEW.final_charge_micro_e THEN
+    IF OLD.final_charge_micro_e IS NOT NULL
+       OR NEW.final_charge_micro_e IS NULL
+       OR NEW.status NOT IN ('SUCCEEDED','FAILED')
+       OR OLD.status IN ('SUCCEEDED','FAILED','CANCELLED') THEN
+      RAISE EXCEPTION 'final execution charge is immutable once determined' USING ERRCODE='55000';
+    END IF;
   END IF;
   RETURN NEW;
 END $$;
