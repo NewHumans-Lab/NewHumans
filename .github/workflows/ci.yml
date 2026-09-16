@@ -27,6 +27,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Enforce PERFECT_REPLACEMENT audit
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-replacement-audit.js
       - run: npm install
       - run: npm run migrate
       - run: npm test
