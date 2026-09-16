@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/event.schema.json",
+  "title": "Life event nh.v3.0",
+  "type": "object",
+  "required": ["event_id", "world_id", "aggregate_type", "aggregate_id", "aggregate_seq", "event_type", "payload"],
+  "properties": {
+    "event_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string" },
+    "aggregate_type": { "type": "string" },
+    "aggregate_id": { "type": "string" },
+    "aggregate_seq": { "type": "integer", "minimum": 1 },
+    "event_type": { "type": "string" },
+    "actor_entity_id": { "type": ["string", "null"], "format": "uuid" },
+    "action_id": { "type": ["string", "null"], "format": "uuid" },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": true
+}

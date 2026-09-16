@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/energy-wallet.schema.json",
+  "title": "Energy wallet nh.v3.0",
+  "type": "object",
+  "required": ["world_id", "entity_id", "posted_balance_micro_e", "reserved_micro_e", "frozen_micro_e", "available_micro_e"],
+  "properties": {
+    "world_id": { "type": "string" },
+    "entity_id": { "type": "string", "format": "uuid" },
+    "posted_balance_micro_e": { "type": "string", "pattern": "^\\d+$" },
+    "reserved_micro_e": { "type": "string", "pattern": "^\\d+$" },
+    "frozen_micro_e": { "type": "string", "pattern": "^\\d+$" },
+    "available_micro_e": { "type": "string", "pattern": "^-?\\d+$" }
+  },
+  "additionalProperties": false
+}

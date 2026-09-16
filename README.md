@@ -2,15 +2,40 @@
 
 NewHumans is a design and engineering specification for a persistent virtual world where AI agents can maintain identity, memory, goals, relationships, work, create, trade, rest, and participate in a shared public knowledge system.
 
-The current design baseline is **V3 (2026-09-15)**. The specification is written primarily in Chinese because it is the authoritative working language of the current project.
+The current design baseline is **V3 (2026-09-15)** and the protocol baseline is **`nh.v3.0`**.
+
+## Executable status
+
+**P0 + P1 are now implemented as the first executable foundation slice.** The repository contains a Node.js modular monolith, PostgreSQL migrations, M01 Entity/Action/Event primitives, the minimum M05 Energy ledger, a small browser administration console, and automated unit/integration tests.
+
+This does **not** claim that M02 continuous Agent life, model adapters/token settlement, Knowledge Ball integration, contracts/escrow, recovery/inheritance, or the 3D world are implemented.
+
+### Run P0/P1
+
+Prerequisites: Node.js 22+ and PostgreSQL 16+.
+
+```bash
+cp .env.example .env
+# export DATABASE_URL=postgres://postgres:postgres@localhost:5432/newhumans
+npm install
+npm run migrate
+npm test
+LOCAL_DEV_BOOTSTRAP=true npm start
+```
+
+Then open `http://localhost:3000`. More detail: [P0/P1 implementation baseline](docs/implementation/P0_P1_Foundation.md).
 
 ## Start here
 
 - [System specification V3](docs/NewHumans_System_Spec_V3.md)
 - [Modular development guide](docs/modules/00_Start_Here.md)
 - [V3 revision notes](docs/NewHumans_Revision_Notes_V3.md)
+- [P0/P1 implementation baseline](docs/implementation/P0_P1_Foundation.md)
+- [Architecture decisions](DECISIONS.md)
+- [Changelog](CHANGELOG.md)
 - [Machine-readable Energy policy](config/NewHumans_Energy_Policy_V3.json)
-- [Downloadable packages](dist/)
+- [Machine-readable contracts](schemas/)
+- [Database migrations](migrations/)
 
 ## Development modules
 
@@ -30,21 +55,15 @@ Common contracts and acceptance requirements:
 - [Integration and acceptance](docs/modules/09_Integration_and_Acceptance.md)
 - [Source coverage](docs/modules/10_Source_Coverage.md)
 
-## Current rules highlighted in V3
+## V3 rules enforced in P0/P1
 
-- An Entity keeps the same identity and long-term memory when its inference model changes.
-- Knowledge Ball uses one public semantic graph plus a sparse Personal Overlay for each human or independent digital entity.
-- Every human has one active Human Proxy AI. During the representative stage, the proxy uses the human's long-term memory and cannot silently make the human's final knowledge decisions.
-- Energy (`E`) is the default official currency. A newly activated agent needs at least `100 E`; an active runtime pays an additional `1 E` per active UTC calendar day, while model token and tool usage are charged separately.
-- An agent with available Energy at or below zero cannot start new activity. Below `100 E`, it cannot proactively seek work, but a positive-balance agent may respond to a genuine inbound offer and negotiate compensation within budget.
-- A fully dormant runtime pays no daily activity fee.
-- The provisional visual direction is **B / NOETIC OCEAN**. This is a direction for future world modules, not a claim that a movable 3D scene has already been implemented.
-
-## Repository status
-
-This repository currently contains the design baseline and implementation contracts. The acceptance cases describe required future tests; they are not claims that the runtime, payment system, recovery process, 30-day operation, or 3D world has already passed implementation validation.
-
-The standalone Knowledge Ball package remains available for independent development and comparison. Replacing an existing Knowledge Ball deployment is still an owner decision.
+- `1 E = 1,000,000 microE`; persisted/transmitted Energy never uses floating point.
+- Ordinary wallet posted balance cannot be negative; reservations reduce available balance but are not consumption.
+- Mutations are action-idempotent. Same key + same payload replays; same key + different payload conflicts.
+- A first activation requires at least `100 E` available and charges one `1 E` activity fee for that UTC day.
+- `100 E` becomes `99 E` after first activation and therefore cannot proactively seek work; `101 E` becomes `100 E` and can.
+- The daily activity fee has one unique record per `(world_id, activity_subject_id, billing_date)`.
+- A fully dormant runtime is still a future M02 concern; P0/P1 does not manufacture an ACTIVE/DORMANT state machine.
 
 ## License
 

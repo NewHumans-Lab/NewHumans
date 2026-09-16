@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/entity.schema.json",
+  "title": "Entity nh.v3.0",
+  "type": "object",
+  "required": ["entity_id", "world_id", "entity_type", "display_id", "name", "identity_status"],
+  "properties": {
+    "entity_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string" },
+    "entity_type": { "enum": ["HUMAN", "AGENT", "COMPANY", "ORGANIZATION", "SYSTEM"] },
+    "display_id": { "type": "string" },
+    "name": { "type": "string" },
+    "identity_status": { "enum": ["ACTIVE", "SUSPENDED", "RETIRED"] }
+  },
+  "additionalProperties": true
+}
