@@ -52,11 +52,20 @@ ALTER TABLE runtime.model_change_events
 -- any checkpoint whose epoch is no longer current or whose state version does not advance
 -- exactly once. A valid checkpoint advances the authoritative lifecycle version in the same
 -- transaction, so there is no second direct-SQL path that can leave checkpoint/state drift.
+-- Lock ordering intentionally matches the service path: lifecycle first, then lease.
 CREATE OR REPLACE FUNCTION runtime.assert_checkpoint_fence() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   l runtime.runtime_leases%ROWTYPE;
   s runtime.lifecycle_states%ROWTYPE;
 BEGIN
+  SELECT * INTO s
+    FROM runtime.lifecycle_states
+   WHERE world_id=NEW.world_id AND activity_subject_id=NEW.activity_subject_id
+   FOR UPDATE;
+  IF s.activity_subject_id IS NULL OR NEW.state_version <> s.state_version + 1 THEN
+    RAISE EXCEPTION 'checkpoint rejected by runtime state-version fence' USING ERRCODE='23514';
+  END IF;
+
   SELECT * INTO l
     FROM runtime.runtime_leases
    WHERE world_id=NEW.world_id AND activity_subject_id=NEW.activity_subject_id
@@ -66,14 +75,6 @@ BEGIN
      OR l.expires_at <= now()
      OR l.lease_epoch <> NEW.lease_epoch THEN
     RAISE EXCEPTION 'checkpoint rejected by current runtime lease fence' USING ERRCODE='23514';
-  END IF;
-
-  SELECT * INTO s
-    FROM runtime.lifecycle_states
-   WHERE world_id=NEW.world_id AND activity_subject_id=NEW.activity_subject_id
-   FOR UPDATE;
-  IF s.activity_subject_id IS NULL OR NEW.state_version <> s.state_version + 1 THEN
-    RAISE EXCEPTION 'checkpoint rejected by runtime state-version fence' USING ERRCODE='23514';
   END IF;
 
   UPDATE runtime.lifecycle_states
