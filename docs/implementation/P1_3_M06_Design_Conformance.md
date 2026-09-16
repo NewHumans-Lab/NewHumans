@@ -1,6 +1,6 @@
 # P1.3 M06 design-conformance hardening
 
-Status: **IMPLEMENTED; FINAL-HEAD VERIFICATION PENDING**.
+Status: **IMPLEMENTED and VERIFIED** against the controlled PostgreSQL 16 CI environment. Implementation head `d6f2b7291240ad8ba4c48981d9b46ed45f6b3cec` passed workflow run `35057406551`: migrations `001` through `004` applied from an empty database, schema/syntax checks passed, all 8 unit tests passed, and all 30 integration/regression tests passed. Real cloud/self-hosted providers remain **UNVERIFIED**.
 
 This slice exists because implementation conformance to the V3 design is the primary acceptance gate. Automated tests are evidence for the reviewed design; they are not a substitute for checking that the code implements the intended semantics.
 
@@ -56,6 +56,21 @@ P1.3 distinguishes two materially different cases:
 
 Known cost is not converted into unknown cost merely because the result payload is unusable.
 
+## Verification evidence
+
+The CI run executed the new design-conformance cases rather than merely compiling them. Verified behaviors include:
+
+1. descriptor `max_input_tokens` rejects before provider dispatch;
+2. a retry cannot reuse yesterday's activity qualification;
+3. zero authoritative available Energy after reservation blocks a provider attempt;
+4. retry rechecks current actor and stops after suspension;
+5. retry rechecks descriptor/connector availability;
+6. trustworthy usage with malformed successful output is receipted and exactly settled;
+7. provider output above the requested maximum is a billed protocol failure, not silent success;
+8. invalid purpose and temperature are rejected before execution creation;
+9. all P1.2 inference/idempotency/timeout/BYOK/failure-with-usage/cross-world cases remain green;
+10. all P0/P1/P1.1 ledger, activation, idempotency and world-isolation regressions remain green.
+
 ## Deliberately still outside this slice
 
 P1.3 does not claim completion of full M06. The following remain explicit future work:
@@ -70,11 +85,9 @@ P1.3 does not claim completion of full M06. The following remain explicit future
 
 These omissions are not hidden behind green tests.
 
-## Verification order
+## Verification order used
 
-Completion of this slice requires, in order:
-
-1. inspect the final diff against the V3 M06 rules and module ownership boundaries;
-2. verify frontend/machine/database contracts remain consistent;
-3. only then use PostgreSQL 16 CI to prove the reviewed behavior and all prior regressions;
-4. update this status to VERIFIED only on a green final PR head.
+1. final branch diff was inspected against V3 M05/M06 rules and module ownership boundaries;
+2. frontend, HTTP, machine schema and database contracts were aligned;
+3. only then was PostgreSQL 16 CI used as acceptance evidence;
+4. after this status-only documentation update, the resulting final PR head must also remain green before the task is closed.
