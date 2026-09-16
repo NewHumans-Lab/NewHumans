@@ -33,12 +33,17 @@ function plainObject(value, field) {
 }
 
 function assertNoSecretMaterial(value, field) {
-  const forbidden = /(api[_-]?key|secret|password|credential|access[_-]?token|bearer[_-]?token)/i;
+  const forbiddenKey = /^(authorization|proxy[-_]?authorization|cookie|set[-_]?cookie|x[-_]?api[-_]?key|api[-_]?key|secret|password|credential|access[-_]?token|bearer[-_]?token)$/i;
+  const forbiddenScalar = /^\s*(bearer|basic)\s+\S+/i;
   const visit = (node) => {
+    if (typeof node === 'string') {
+      if (forbiddenScalar.test(node)) throw problem('SECRET_MATERIAL_FORBIDDEN', `${field} must not contain secret or credential material`);
+      return;
+    }
     if (Array.isArray(node)) return node.forEach(visit);
     if (!node || typeof node !== 'object') return;
     for (const [key, child] of Object.entries(node)) {
-      if (forbidden.test(key)) throw problem('SECRET_MATERIAL_FORBIDDEN', `${field} must not contain secret or credential material`);
+      if (forbiddenKey.test(key)) throw problem('SECRET_MATERIAL_FORBIDDEN', `${field} must not contain secret or credential material`);
       visit(child);
     }
   };
@@ -95,11 +100,9 @@ export async function registerAgentRuntime(client, {
   if (!entity || entity.entity_type !== 'AGENT' || entity.identity_status !== 'ACTIVE') {
     throw problem('INVALID_RUNTIME_SUBJECT', 'runtime profile requires an active AGENT Entity', 409);
   }
-  const memorySubject = (await client.query(
-    `SELECT entity_id FROM core.entities WHERE world_id=$1 AND entity_id=$2`,
-    [worldId, memorySubjectId],
-  )).rows[0];
-  if (!memorySubject) throw problem('INVALID_MEMORY_SUBJECT', 'memory subject must be an Entity in the same world', 409);
+  if (memorySubjectId !== agentEntityId) {
+    throw problem('INVALID_MEMORY_SUBJECT', 'ordinary Agent memory must be bound to the Agent Entity until the authoritative HPA binding path exists', 409);
+  }
   const exists = await client.query(
     `SELECT 1 FROM runtime.agent_profiles WHERE world_id=$1 AND agent_entity_id=$2`,
     [worldId, agentEntityId],
@@ -187,10 +190,21 @@ export async function registerModelManifest(client, {
 
 export async function publishModelRoute(client, {
   worldId, agentEntityId, manifestId, routePolicy = {}, maxTurnBudgetMicroE = null,
-  reason, actorEntityId, actionId,
+  expectedProfileVersion = null, reason, actorEntityId, actionId,
 }) {
   await assertSystem(client, worldId, actorEntityId);
   const profile = await assertProfile(client, worldId, agentEntityId, { lock: true });
+  if (expectedProfileVersion === null || expectedProfileVersion === undefined) {
+    if (profile.current_route_id !== null) {
+      throw problem('EXPECTED_PROFILE_VERSION_REQUIRED', 'route replacement requires expectedProfileVersion', 409);
+    }
+  } else {
+    const expected = String(expectedProfileVersion);
+    if (!/^[1-9]\d*$/.test(expected)) throw problem('INVALID_RUNTIME_INPUT', 'expectedProfileVersion must be a positive integer');
+    if (String(profile.profile_version) !== expected) {
+      throw problem('PROFILE_VERSION_CONFLICT', `expected profile version ${expected} but current is ${profile.profile_version}`, 409);
+    }
+  }
   const currentLifecycle = (await client.query(
     `SELECT life_status,execution_status,state_version FROM runtime.lifecycle_states WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
     [worldId, agentEntityId],
@@ -262,6 +276,7 @@ export async function publishModelRoute(client, {
       toRouteId: route.route_id,
       routeVersion: route.route_version,
       manifestId,
+      expectedProfileVersion: expectedProfileVersion ?? String(profile.profile_version),
       stateVersion: lifecycle.state_version,
     },
   });
@@ -289,11 +304,12 @@ export async function acquireRuntimeLease(client, {
     [worldId, agentEntityId],
   );
   const current = (await client.query(
-    `SELECT worker_id,lease_epoch,expires_at,released_at FROM runtime.runtime_leases
+    `SELECT worker_id,lease_epoch,(released_at IS NULL AND expires_at > now()) active
+       FROM runtime.runtime_leases
       WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
     [worldId, agentEntityId],
   )).rows[0];
-  if (current && !current.released_at && new Date(current.expires_at).getTime() > Date.now()) {
+  if (current?.active) {
     throw problem('LEASE_HELD', `runtime lease is already held by ${current.worker_id}`, 409);
   }
   const epoch = current ? (BigInt(current.lease_epoch) + 1n).toString() : '1';
@@ -331,10 +347,11 @@ export async function renewRuntimeLease(client, {
     [worldId, agentEntityId],
   );
   const lease = (await client.query(
-    `SELECT * FROM runtime.runtime_leases WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
+    `SELECT worker_id,lease_epoch,(released_at IS NULL AND expires_at > now()) active
+       FROM runtime.runtime_leases WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
     [worldId, agentEntityId],
   )).rows[0];
-  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || lease.released_at || new Date(lease.expires_at).getTime() <= Date.now()) {
+  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || !lease.active) {
     throw problem('STALE_RUNTIME_LEASE', 'runtime lease is missing, expired, released, or has a different epoch/worker', 409);
   }
   const updated = (await client.query(
@@ -382,13 +399,14 @@ export async function releaseRuntimeLease(client, {
 
 export async function saveRuntimeCheckpoint(client, {
   worldId, agentEntityId, workerId, leaseEpoch, expectedStateVersion,
-  eventCursor = {}, currentPlan = {}, pendingActions = [], actorEntityId, actionId,
+  eventCursor = {}, currentPlan = {}, pendingActions = [], goalRefs = [], actorEntityId, actionId,
 }) {
   await assertSystem(client, worldId, actorEntityId);
   workerId = nonEmptyText(workerId, 'workerId', 200);
   eventCursor = plainObject(eventCursor, 'eventCursor');
   currentPlan = plainObject(currentPlan, 'currentPlan');
   if (!Array.isArray(pendingActions)) throw problem('INVALID_RUNTIME_INPUT', 'pendingActions must be an array');
+  if (!Array.isArray(goalRefs)) throw problem('INVALID_RUNTIME_INPUT', 'goalRefs must be an array');
   const epoch = String(leaseEpoch);
   if (!/^\d+$/.test(epoch) || BigInt(epoch) <= 0n) throw problem('INVALID_RUNTIME_INPUT', 'leaseEpoch must be a positive integer');
   const expected = String(expectedStateVersion);
@@ -400,11 +418,12 @@ export async function saveRuntimeCheckpoint(client, {
   )).rows[0];
   if (!state) throw problem('RUNTIME_STATE_NOT_FOUND', 'runtime lifecycle state not found', 404);
   const lease = (await client.query(
-    `SELECT worker_id,lease_epoch,expires_at,released_at FROM runtime.runtime_leases
+    `SELECT worker_id,lease_epoch,(released_at IS NULL AND expires_at > now()) active
+       FROM runtime.runtime_leases
       WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
     [worldId, agentEntityId],
   )).rows[0];
-  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || lease.released_at || new Date(lease.expires_at).getTime() <= Date.now()) {
+  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || !lease.active) {
     throw problem('STALE_RUNTIME_LEASE', 'checkpoint writer does not hold the current active lease', 409);
   }
   if (String(state.state_version) !== expected) {
@@ -413,11 +432,11 @@ export async function saveRuntimeCheckpoint(client, {
   const nextVersion = (BigInt(expected) + 1n).toString();
   const checkpoint = (await client.query(
     `INSERT INTO runtime.runtime_checkpoints
-      (world_id,activity_subject_id,lease_epoch,state_version,event_cursor,current_plan,pending_actions,state_summary)
-     VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb)
-     RETURNING checkpoint_id,activity_subject_id,lease_epoch,state_version,event_cursor,current_plan,pending_actions,state_summary,created_at`,
+      (world_id,activity_subject_id,lease_epoch,state_version,event_cursor,current_plan,pending_actions,state_summary,goal_refs)
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb)
+     RETURNING checkpoint_id,activity_subject_id,lease_epoch,state_version,event_cursor,current_plan,pending_actions,state_summary,route_id,manifest_id,goal_refs,recovery_authority_status,created_at`,
     [worldId, agentEntityId, epoch, nextVersion, JSON.stringify(eventCursor), JSON.stringify(currentPlan), JSON.stringify(pendingActions),
-      JSON.stringify({ m03Context: 'DEFERRED', autonomousTurn: 'BLOCKED_DEPENDENCY' })],
+      JSON.stringify({ m03Context: 'DEFERRED', autonomousTurn: 'BLOCKED_DEPENDENCY' }), JSON.stringify(goalRefs)],
   )).rows[0];
   await client.query(
     `UPDATE runtime.lifecycle_states SET state_version=$3,updated_at=now()
@@ -427,7 +446,14 @@ export async function saveRuntimeCheckpoint(client, {
   if (actionId) await appendEvent(client, {
     worldId, aggregateType: 'RUNTIME_AGENT', aggregateId: agentEntityId,
     eventType: 'RUNTIME_CHECKPOINT_SAVED', actorEntityId, actionId,
-    payload: { checkpointId: checkpoint.checkpoint_id, leaseEpoch: epoch, stateVersion: nextVersion },
+    payload: {
+      checkpointId: checkpoint.checkpoint_id,
+      leaseEpoch: epoch,
+      stateVersion: nextVersion,
+      routeId: checkpoint.route_id,
+      manifestId: checkpoint.manifest_id,
+      goalRefs: checkpoint.goal_refs,
+    },
   });
   return checkpoint;
 }
@@ -508,16 +534,21 @@ export async function inspectAgentRuntime(client, { worldId, agentEntityId, acto
   await assertVisible(client, worldId, agentEntityId, actorEntityId);
   const profile = await assertProfile(client, worldId, agentEntityId);
   const lifecycle = (await client.query(
-    `SELECT life_status,execution_status,model_status,restriction_flags,archive_status,state_version,updated_at
+    `SELECT life_status,execution_status,model_status,restriction_flags,archive_status,state_version,dormant_reason,last_transition_at,updated_at
        FROM runtime.lifecycle_states WHERE world_id=$1 AND activity_subject_id=$2`,
     [worldId, agentEntityId],
   )).rows[0];
   const route = profile.current_route_id ? (await client.query(
-    `SELECT r.*,m.gateway_descriptor_id,m.gateway_connector_id,m.descriptor_version,m.provider_protocol,m.model_reference,m.assurance_level,m.verification_status,m.connector_kind,m.billing_mode,m.prompt_version,m.sampling_settings,m.artifact_digest
-       FROM runtime.model_routes r JOIN runtime.model_manifests m ON m.world_id=r.world_id AND m.manifest_id=r.manifest_id
-      WHERE r.world_id=$1 AND r.route_id=$2`,
-    [worldId, profile.current_route_id],
+    `SELECT r.*,m.gateway_descriptor_id,m.gateway_connector_id,m.descriptor_version,m.provider_protocol,m.model_reference,m.assurance_level,m.verification_status,m.connector_kind,m.billing_mode,m.prompt_version,m.sampling_settings,m.artifact_digest,
+            d.status descriptor_status,c.enabled connector_enabled
+       FROM runtime.model_routes r
+       JOIN runtime.model_manifests m ON m.world_id=r.world_id AND m.agent_entity_id=r.agent_entity_id AND m.manifest_id=r.manifest_id
+       JOIN gateway.capability_descriptors d ON d.world_id=m.world_id AND d.descriptor_id=m.gateway_descriptor_id
+       JOIN gateway.connector_configs c ON c.world_id=m.world_id AND c.connector_id=m.gateway_connector_id AND c.descriptor_id=m.gateway_descriptor_id
+      WHERE r.world_id=$1 AND r.agent_entity_id=$2 AND r.route_id=$3`,
+    [worldId, agentEntityId, profile.current_route_id],
   )).rows[0] : null;
+  if (route) route.available = route.descriptor_status === 'ACTIVE' && route.connector_enabled === true;
   const lease = (await client.query(
     `SELECT worker_id,lease_epoch,acquired_at,heartbeat_at,expires_at,released_at,
             (released_at IS NULL AND expires_at > now()) active
@@ -525,13 +556,17 @@ export async function inspectAgentRuntime(client, { worldId, agentEntityId, acto
     [worldId, agentEntityId],
   )).rows[0] ?? null;
   const checkpoint = (await client.query(
-    `SELECT checkpoint_id,lease_epoch,state_version,event_cursor,current_plan,pending_actions,state_summary,created_at
+    `SELECT checkpoint_id,lease_epoch,state_version,event_cursor,current_plan,pending_actions,state_summary,
+            route_id,manifest_id,goal_refs,recovery_authority_status,created_at
        FROM runtime.runtime_checkpoints WHERE world_id=$1 AND activity_subject_id=$2 ORDER BY state_version DESC LIMIT 1`,
     [worldId, agentEntityId],
   )).rows[0] ?? null;
   const goals = (await client.query(
-    `SELECT goal_id,source,goal_text,priority,rationale,budget_micro_e,deadline,parent_goal_id,success_evidence,status,version,created_at,updated_at
-       FROM runtime.goals WHERE world_id=$1 AND subject_id=$2 ORDER BY created_at,goal_id`,
+    `SELECT g.goal_id,g.world_id,g.subject_id,g.source,g.goal_text,g.priority,g.rationale,g.budget_micro_e,g.deadline,g.parent_goal_id,g.success_evidence,g.status,g.version,g.created_at,g.updated_at,
+            COALESCE((SELECT json_agg(d.depends_on_goal_id ORDER BY d.depends_on_goal_id)
+                        FROM runtime.goal_dependencies d
+                       WHERE d.world_id=g.world_id AND d.subject_id=g.subject_id AND d.goal_id=g.goal_id),'[]'::json) dependency_goal_ids
+       FROM runtime.goals g WHERE g.world_id=$1 AND g.subject_id=$2 ORDER BY g.created_at,g.goal_id`,
     [worldId, agentEntityId],
   )).rows;
   return {
@@ -550,5 +585,8 @@ export async function inspectAgentRuntime(client, { worldId, agentEntityId, acto
 }
 
 export async function getAgentRuntime(pool, input) {
-  return withTransaction(pool, (client) => inspectAgentRuntime(client, input));
+  return withTransaction(pool, async (client) => {
+    await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    return inspectAgentRuntime(client, input);
+  });
 }
