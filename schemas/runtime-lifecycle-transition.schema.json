@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/runtime-lifecycle-transition.schema.json",
+  "title": "M02 lifecycle transition nh.v3.0",
+  "type": "object",
+  "required": ["transition_id","world_id","activity_subject_id","from_life_status","to_life_status","reason","state_version","created_by","created_at"],
+  "properties": {
+    "transition_id": {"type":"string","format":"uuid"},
+    "world_id": {"type":"string","minLength":1},
+    "activity_subject_id": {"type":"string","format":"uuid"},
+    "from_life_status": {"enum":["REGISTERED","ACTIVE","DORMANT","TERMINATED"]},
+    "to_life_status": {"enum":["REGISTERED","ACTIVE","DORMANT","TERMINATED"]},
+    "reason": {"type":"string","minLength":1,"maxLength":2000},
+    "billing_date": {"anyOf":[{"type":"string","format":"date"},{"type":"null"}]},
+    "state_version": {"anyOf":[{"type":"integer","minimum":1},{"type":"string","pattern":"^[1-9]\\d*$"}]},
+    "created_by": {"type":"string","format":"uuid"},
+    "created_at": {"type":"string","format":"date-time"}
+  },
+  "additionalProperties": true
+}

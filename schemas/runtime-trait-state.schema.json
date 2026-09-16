@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/runtime-trait-state.schema.json",
+  "title": "M02 trait state nh.v3.0",
+  "type": "object",
+  "required": ["world_id","subject_id","trait_key","trait_class","value_ppm","version","updated_by","updated_at"],
+  "properties": {
+    "world_id": {"type":"string","minLength":1},
+    "subject_id": {"type":"string","format":"uuid"},
+    "trait_key": {"type":"string","pattern":"^[a-z][a-z0-9_.-]{0,99}$"},
+    "trait_class": {"enum":["BIRTH","LEARNED","SHORT_TERM"]},
+    "value_ppm": {"type":"integer","minimum":0,"maximum":1000000},
+    "version": {"anyOf":[{"type":"integer","minimum":1},{"type":"string","pattern":"^[1-9]\\d*$"}]},
+    "updated_by": {"type":"string","format":"uuid"},
+    "updated_at": {"type":"string","format":"date-time"}
+  },
+  "additionalProperties": true
+}

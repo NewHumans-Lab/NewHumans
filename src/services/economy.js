@@ -150,8 +150,19 @@ async function chargeFee(client, { worldId, entityId, billingDate, actorEntityId
   return { journal_id: journal.journalId, amount_micro_e: DAILY_ACTIVITY_FEE_MICRO_E.toString(), replayed: false };
 }
 
+async function assertActivityInitiator(client, worldId, entityId, actorEntityId) {
+  if (actorEntityId === entityId) return;
+  const actor = await client.query(
+    `SELECT entity_type,identity_status FROM core.entities WHERE world_id=$1 AND entity_id=$2`,
+    [worldId, actorEntityId],
+  );
+  if (actor.rows[0]?.entity_type !== 'SYSTEM' || actor.rows[0]?.identity_status !== 'ACTIVE') {
+    throw Object.assign(new Error('activity fee/activation may be initiated only by the subject or an active SYSTEM actor'), { code: 'FORBIDDEN', status: 403 });
+  }
+}
+
 export async function firstActivation(client, { worldId, entityId, billingDate, actorEntityId, actionId }) {
-  if (actorEntityId !== entityId) throw Object.assign(new Error('first activation must be initiated by the activity subject in P1'), { code: 'FORBIDDEN', status: 403 });
+  await assertActivityInitiator(client, worldId, entityId, actorEntityId);
   const prior = await client.query('SELECT first_activated_at FROM economy.activity_subjects WHERE world_id=$1 AND entity_id=$2 FOR UPDATE', [worldId, entityId]);
   if (prior.rows[0]?.first_activated_at) throw Object.assign(new Error('first activation already completed'), { code: 'ALREADY_ACTIVATED', status: 409 });
   const wallet = await lockWallet(client, worldId, entityId); const decision = activationDecision(wallet.available_micro_e);
@@ -162,7 +173,7 @@ export async function firstActivation(client, { worldId, entityId, billingDate, 
 }
 
 export async function chargeDailyActivityFee(client, { worldId, entityId, billingDate, actorEntityId, actionId }) {
-  if (actorEntityId !== entityId) throw Object.assign(new Error('activity fee charge requires subject actor in P1'), { code: 'FORBIDDEN', status: 403 });
+  await assertActivityInitiator(client, worldId, entityId, actorEntityId);
   const activated = await client.query('SELECT first_activated_at FROM economy.activity_subjects WHERE world_id=$1 AND entity_id=$2', [worldId, entityId]);
   if (!activated.rows[0]?.first_activated_at) throw Object.assign(new Error('subject has never completed first activation'), { code: 'NOT_ACTIVATED', status: 409 });
   const fee = await chargeFee(client, { worldId, entityId, billingDate, actorEntityId, actionId });

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/runtime-scheduled-action.schema.json",
+  "title": "M02 scheduled action nh.v3.0",
+  "type": "object",
+  "required": ["scheduled_action_id","world_id","subject_id","action_kind","due_at","timezone","filter_json","missed_policy","priority","dedupe_key","status","created_by","created_at","updated_at"],
+  "properties": {
+    "scheduled_action_id": {"type":"string","format":"uuid"},
+    "world_id": {"type":"string","minLength":1},
+    "subject_id": {"type":"string","format":"uuid"},
+    "action_kind": {"enum":["WAKE","AUTONOMOUS_TURN"]},
+    "due_at": {"type":"string","format":"date-time"},
+    "timezone": {"type":"string","minLength":1,"maxLength":100},
+    "filter_json": {"type":"object"},
+    "missed_policy": {"enum":["RUN_ONCE","SKIP"]},
+    "latest_run_at": {"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},
+    "budget_micro_e": {"anyOf":[{"type":"string","pattern":"^\\d+$"},{"type":"integer","minimum":0},{"type":"null"}]},
+    "priority": {"type":"integer"},
+    "dedupe_key": {"type":"string","minLength":1,"maxLength":200},
+    "status": {"enum":["SCHEDULED","CLAIMED","COMPLETED","CANCELLED","MISSED","BLOCKED"]},
+    "claimed_by_worker": {"anyOf":[{"type":"string"},{"type":"null"}]},
+    "claimed_lease_epoch": {"anyOf":[{"type":"string","pattern":"^[1-9]\\d*$"},{"type":"integer","minimum":1},{"type":"null"}]},
+    "claimed_at": {"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},
+    "completed_at": {"anyOf":[{"type":"string","format":"date-time"},{"type":"null"}]},
+    "blocked_reason": {"anyOf":[{"type":"string"},{"type":"null"}]},
+    "created_by": {"type":"string","format":"uuid"},
+    "created_at": {"type":"string","format":"date-time"},
+    "updated_at": {"type":"string","format":"date-time"}
+  },
+  "additionalProperties": true
+}
