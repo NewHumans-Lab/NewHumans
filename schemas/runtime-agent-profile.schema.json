@@ -9,7 +9,12 @@
     "agent_entity_id": { "type": "string", "format": "uuid" },
     "memory_subject_id": { "type": "string", "format": "uuid" },
     "current_route_id": { "type": ["string", "null"], "format": "uuid" },
-    "profile_version": { "type": ["integer", "string"], "pattern": "^[1-9]\\d*$" },
+    "profile_version": {
+      "anyOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string", "pattern": "^[1-9]\\d*$" }
+      ]
+    },
     "created_by": { "type": "string", "format": "uuid" },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
