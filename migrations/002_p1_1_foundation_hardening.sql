@@ -120,3 +120,27 @@ CREATE CONSTRAINT TRIGGER journals_integrity_deferred
   AFTER INSERT ON economy.journals
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION economy.assert_journal_integrity();
+
+-- Replace the P0/P1 posting balance function so the already-existing deferred
+-- posting trigger also enforces the journal's sealed posting count. This means
+-- a committed journal cannot later be extended with an additional balanced pair.
+CREATE OR REPLACE FUNCTION economy.assert_balanced_journal() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  v_journal uuid := COALESCE(NEW.journal_id, OLD.journal_id);
+  v_expected integer;
+  v_count bigint;
+  v_sum numeric;
+BEGIN
+  SELECT expected_posting_count INTO v_expected FROM economy.journals WHERE journal_id = v_journal;
+  SELECT COUNT(*), COALESCE(SUM(amount_micro_e),0)
+    INTO v_count, v_sum
+    FROM economy.postings
+   WHERE journal_id = v_journal;
+  IF v_count <> v_expected THEN
+    RAISE EXCEPTION 'journal % expected % postings but has %', v_journal, v_expected, v_count USING ERRCODE = '23514';
+  END IF;
+  IF v_sum <> 0 THEN
+    RAISE EXCEPTION 'journal % is not balanced: %', v_journal, v_sum USING ERRCODE = '23514';
+  END IF;
+  RETURN NULL;
+END $$;
