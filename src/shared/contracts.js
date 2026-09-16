@@ -23,7 +23,6 @@ export function assertCommandEnvelope(envelope) {
 }
 
 export function buildCommandEnvelope({
-  worldId,
   commandType,
   idempotencyKey,
   payload = {},
@@ -33,7 +32,6 @@ export function buildCommandEnvelope({
 }) {
   const envelope = {
     schema_version: 'nh.v3.0',
-    world_id: worldId,
     command_type: commandType,
     idempotency_key: idempotencyKey,
     payload,
@@ -44,10 +42,16 @@ export function buildCommandEnvelope({
   return assertCommandEnvelope(envelope);
 }
 
-export function toRunCommand(envelope, actorEntityId) {
+export function toRunCommand(envelope, { actorEntityId, worldId }) {
   assertCommandEnvelope(envelope);
+  if (typeof worldId !== 'string' || worldId.length === 0) {
+    const error = new Error('trusted world context is required');
+    error.code = 'UNAUTHENTICATED_WORLD_CONTEXT';
+    error.status = 401;
+    throw error;
+  }
   return {
-    worldId: envelope.world_id,
+    worldId,
     actorEntityId,
     actionType: envelope.command_type,
     idempotencyKey: envelope.idempotency_key,

@@ -6,11 +6,13 @@ The current design baseline is **V3 (2026-09-15)** and the protocol baseline is 
 
 ## Executable status
 
-**P0/P1 + P1.1 + the P1.2 minimum M06 gateway + P1.3 M06 design-conformance hardening are implemented and verified against controlled PostgreSQL 16 CI.** The repository contains a Node.js modular monolith, PostgreSQL migrations, M01 Entity/Action/Event primitives, the minimum M05 Energy ledger, an OpenAI-compatible M06 execution/usage/settlement chain, a browser administration console, and automated unit/integration tests.
+**P0/P1 through P1.4 final contract closure are implemented on the P1.4 branch; final PostgreSQL 16 PR verification is the acceptance gate.** The executable slice contains M01 Entity/Action/Event primitives, the minimum M05 Energy ledger plus authoritative resource quotes, and the minimum M06 OpenAI-compatible execution/usage/settlement chain with cancellation and receipt lookup.
 
-P1.2 final PR #6 head `98cbdc41d5172bdbbe17a3f24abeca839a269b2d` passed workflow run `35056015615`. P1.3 implementation head `d6f2b7291240ad8ba4c48981d9b46ed45f6b3cec` passed workflow run `35057406551`: empty PostgreSQL 16 migrations `001`–`004`, schema/syntax checks, 8 unit tests and 30 integration/regression tests all passed. These are controlled implementation-verification results, **not** evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is deliberately exercised.
+Previously verified evidence remains valid: P1.2 final PR #6 head `98cbdc41d5172bdbbe17a3f24abeca839a269b2d` passed workflow run `35056015615`; P1.3 implementation head `d6f2b7291240ad8ba4c48981d9b46ed45f6b3cec` passed workflow run `35057406551`. P1.4 must additionally pass an empty PostgreSQL 16 migration through `005`, schema/syntax checks, all previous regressions and the new contract-closure tests before it is marked VERIFIED.
 
-This does **not** claim that M02 continuous Agent life/model routing, M03 Knowledge Ball, contracts/escrow, recovery/inheritance, or the 3D world are implemented.
+These controlled tests are **not** evidence that a real cloud model or real local/self-hosted model has been verified. Real connector/model verification remains `UNVERIFIED` until an actual endpoint is deliberately exercised. Production authentication/credential vault also remain future work.
+
+This does **not** claim that M02 continuous Agent life/model routing, M03 Knowledge Ball, M04 contracts/social collaboration, recovery/inheritance, or the 3D world are implemented.
 
 ### Run the executable foundation
 
@@ -32,6 +34,7 @@ Implementation evidence:
 - [P0/P1 implementation baseline](docs/implementation/P0_P1_Foundation.md)
 - [P1.2 minimum M06 gateway](docs/implementation/P1_2_M06_Gateway.md)
 - [P1.3 M06 design conformance](docs/implementation/P1_3_M06_Design_Conformance.md)
+- [P1.4 final contract closure](docs/implementation/P1_4_Final_Contract_Closure.md)
 
 ## Start here
 
@@ -64,17 +67,20 @@ Common contracts and acceptance requirements:
 
 ## V3 rules currently enforced by executable code
 
+- `world_id` is trusted server context and is not a client command-envelope/business-payload field. The current development header adapter is explicitly production-blocked.
 - `1 E = 1,000,000 microE`; persisted/transmitted Energy never uses floating point.
 - Ordinary wallet posted balance cannot be negative; reservations reduce available balance but are not consumption.
 - Energy journals/postings are sealed append-only records; corrections require new records.
 - Mutations are action-idempotent. Same key + same payload replays; same key + different payload conflicts.
 - A first activation requires at least `100 E` available and charges one `1 E` activity fee for that UTC day.
 - `100 E` becomes `99 E` after first activation and therefore cannot proactively seek work; `101 E` becomes `100 E` and can.
-- A platform-paid M06 inference requires the charged current UTC activity day and a same-world active reservation; measured usage settles only the actual microE charge.
-- Every provider send/retry rechecks current actor status, current UTC billing date, positive available Energy, route availability and reservation before dispatch.
+- New platform-paid M06 inference uses an authoritative M05 quote and a quote-backed reservation before dispatch; execution, usage receipt and settlement retain that chain.
+- Every provider send/retry rechecks current actor status, current UTC billing date, positive available Energy, route availability, quote and reservation before dispatch.
+- `max_retries` counts retries after the initial attempt: 0..3 means at most 1..4 total attempts.
 - M06 enforces declared input/output bounds; PRIMARY and AUXILIARY inference purposes are distinct machine/database values.
 - BYOK usage is recorded but the external model cost is not charged again to the NewHumans Energy wallet.
-- Known provider usage remains billable even if the returned output is unusable; ambiguous external outcome remains `OUTCOME_UNKNOWN` and retains budget for reconciliation.
+- Known provider usage remains billable even if returned output is unusable; ambiguous external outcome remains `OUTCOME_UNKNOWN` and retains budget for reconciliation.
+- `gateway.cancel` only reports `CANCELLED` when cancellation is actually confirmed before dispatch; a dispatched request is not falsely relabelled.
 - Secrets are referenced by server-side environment-variable name and are not stored in gateway business tables/events.
 - A fully dormant runtime is still a future M02 concern; current accounting activation is not an ACTIVE/DORMANT life state machine.
 

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/resource-quote.schema.json",
+  "title": "M05 resource quote nh.v3.0",
+  "type": "object",
+  "required": ["quote_id", "world_id", "payer_entity_id", "activity_subject_id", "resource_kind", "resource_ref", "rate_version", "max_input_tokens", "max_output_tokens", "max_cost_micro_e", "status", "expires_at"],
+  "properties": {
+    "quote_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "payer_entity_id": { "type": "string", "format": "uuid" },
+    "activity_subject_id": { "type": "string", "format": "uuid" },
+    "resource_kind": { "const": "MODEL_INFERENCE" },
+    "resource_ref": { "type": "string", "format": "uuid" },
+    "rate_version": { "type": "string", "minLength": 1 },
+    "input_rate_micro_e_per_million": { "type": "string", "pattern": "^\\d+$" },
+    "output_rate_micro_e_per_million": { "type": "string", "pattern": "^\\d+$" },
+    "max_input_tokens": { "type": "integer", "minimum": 1 },
+    "max_output_tokens": { "type": "integer", "minimum": 1 },
+    "max_cost_micro_e": { "type": "string", "pattern": "^\\d+$" },
+    "status": { "enum": ["ACTIVE", "RESERVED", "CONSUMED", "CANCELLED", "EXPIRED"] },
+    "expires_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

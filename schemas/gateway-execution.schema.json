@@ -12,6 +12,7 @@
     "payer_entity_id": { "type": "string", "format": "uuid" },
     "descriptor_id": { "type": "string", "format": "uuid" },
     "connector_id": { "type": "string", "format": "uuid" },
+    "quote_id": { "type": ["string", "null"], "format": "uuid" },
     "reservation_id": { "type": ["string", "null"], "format": "uuid" },
     "billing_date": { "type": "string", "format": "date" },
     "action_purpose": { "enum": ["PRIMARY_INFERENCE", "AUXILIARY_INFERENCE"] },

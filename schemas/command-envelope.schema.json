@@ -3,11 +3,10 @@
   "$id": "https://newhumans.world/schemas/command-envelope.schema.json",
   "title": "NewHumans command envelope nh.v3.0",
   "type": "object",
-  "required": ["schema_version", "world_id", "command_type", "idempotency_key", "payload"],
+  "required": ["schema_version", "command_type", "idempotency_key", "payload"],
   "properties": {
     "schema_version": { "const": "nh.v3.0" },
     "request_id": { "type": "string", "minLength": 1, "maxLength": 200 },
-    "world_id": { "type": "string", "minLength": 1 },
     "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 200 },
     "command_type": { "type": "string", "minLength": 1 },
     "expected_version": { "type": "integer", "minimum": 1 },

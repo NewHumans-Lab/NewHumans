@@ -48,7 +48,7 @@ Committed `economy.journals` and `economy.postings` cannot be updated or deleted
 ## ADR-010 — The canonical command contract is snake_case `nh.v3.0`
 Status: Accepted · 2026-09-16
 
-`schemas/command-envelope.schema.json` follows the authoritative Shared Contracts document. The HTTP adapter constructs and validates the envelope; authenticated actor identity remains server-bound and is never accepted from the command envelope.
+`schemas/command-envelope.schema.json` follows the authoritative Shared Contracts document. Authenticated actor identity and current world are trusted request context; neither is accepted from the command envelope or business payload.
 
 ## ADR-011 — External model I/O never holds a database transaction open
 Status: Accepted · 2026-09-16
@@ -73,9 +73,31 @@ Gateway connector rows may store the name of a server-side environment credentia
 ## ADR-015 — Every provider attempt revalidates current execution eligibility atomically
 Status: Accepted · 2026-09-16
 
-Initial authorization is not a reusable license for later sends. Immediately before every provider attempt, including retries, M06 rechecks the current actor, current UTC billing date, charged activity fee, positive available Energy, descriptor/connector availability and platform reservation. Those checks and creation of the `DISPATCHED` attempt/provider-request records occur in one short database transaction. Provider network I/O starts only after that transaction commits. This preserves current-state authority without violating ADR-011.
+Initial authorization is not a reusable license for later sends. Immediately before every provider attempt, including retries, M06 rechecks the current actor, current UTC billing date, charged activity fee, positive available Energy, descriptor/connector availability and platform reservation. P1.4 additionally enforces the quote/reservation link and quote expiry at provider-request insertion for quote-backed executions. Those checks occur before provider network I/O.
 
 ## ADR-016 — Trustworthy measured usage is settled even when the result payload is unusable
 Status: Accepted · 2026-09-16
 
 Provider execution outcome and local result usability are separate facts. If a provider response contains trustworthy measured usage but the output is malformed or violates a requested result limit, M06 records the usage and asks M05 to settle the exact known charge, then marks the execution `FAILED`. `OUTCOME_UNKNOWN` is reserved for cases where execution/usage is materially uncertain; an unusable result does not erase a known cost.
+
+## ADR-017 — World is trusted context, not a command field
+Status: Accepted · 2026-09-16
+
+The canonical `nh.v3.0` command envelope no longer contains `world_id`. The current world is bound by trusted server context together with the authenticated actor. The development adapter represents that context with `x-nh-world-id` and is production-blocked, exactly like the development actor header. Client payloads containing `worldId` or `world_id` are rejected. Internal Action hashing keeps the trusted world in the persisted payload shape only to preserve replay compatibility with pre-P1.4 actions.
+
+## ADR-018 — Platform-paid M06 execution is quote-backed
+Status: Accepted · 2026-09-16
+
+A new public platform-paid inference follows `M05 quote → M05 reservation → M06 execution → M06 usage receipt → M05 settlement`. The quote snapshots resource scope, descriptor version/rates, limits, maximum cost and expiry. A reservation references exactly one quote and the database binds the execution to that reservation's quote.
+
+Existing P1.3 internal calls remain grandfathered so migration 005 does not reinterpret or break previously valid direct service usage. The P1.4 HTTP/service surface requires the explicit quote-backed path. BYOK does not create a platform model-cost quote/reservation because the external provider cost is not paid from NewHumans Energy.
+
+## ADR-019 — `max_retries` excludes the initial attempt
+Status: Accepted · 2026-09-16
+
+`max_retries` is an integer from 0 through 3. It counts retries after the initial attempt, so `max_retries=3` permits at most four provider attempts total. The legacy `max_attempts` database/input path is retained as a compatibility field for P1.2/P1.3 code and synchronized as `max_attempts=max_retries+1`; new machine/HTTP surfaces use `max_retries`.
+
+## ADR-020 — Cancellation is truthful about dispatch state
+Status: Accepted · 2026-09-16
+
+`gateway.cancel` may mark a `PROPOSED` execution `CANCELLED` and release its quote-backed reservation because no provider request has left the system. A `DISPATCHED` execution is not labelled cancelled merely because cancellation was requested; until a provider-specific cancellation protocol is implemented, the API returns that cancellation was not accepted and preserves the real execution state. Already terminal executions replay their terminal state.

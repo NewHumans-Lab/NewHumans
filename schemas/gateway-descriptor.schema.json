@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/gateway-descriptor.schema.json",
+  "title": "M06 capability descriptor nh.v3.0",
+  "type": "object",
+  "required": ["descriptor_id", "world_id", "descriptor_key", "version", "model_reference", "max_input_tokens", "max_output_tokens", "timeout_ms", "max_retries", "supports_idempotency", "supports_reconciliation", "status"],
+  "properties": {
+    "descriptor_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "descriptor_key": { "type": "string", "minLength": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "model_reference": { "type": "string", "minLength": 1 },
+    "max_input_tokens": { "type": "integer", "minimum": 1 },
+    "max_output_tokens": { "type": "integer", "minimum": 1 },
+    "timeout_ms": { "type": "integer", "minimum": 100, "maximum": 300000 },
+    "max_retries": { "type": "integer", "minimum": 0, "maximum": 3 },
+    "supports_idempotency": { "type": "boolean" },
+    "supports_reconciliation": { "type": "boolean" },
+    "status": { "enum": ["ACTIVE", "DISABLED"] }
+  },
+  "additionalProperties": true
+}
