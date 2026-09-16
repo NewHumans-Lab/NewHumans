@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/gateway-execution.schema.json",
+  "title": "M06 gateway execution nh.v3.0",
+  "type": "object",
+  "required": ["execution_id", "world_id", "action_id", "activity_subject_id", "payer_entity_id", "descriptor_id", "connector_id", "billing_date", "action_purpose", "input_digest", "max_charge_micro_e", "status"],
+  "properties": {
+    "execution_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "action_id": { "type": "string", "format": "uuid" },
+    "activity_subject_id": { "type": "string", "format": "uuid" },
+    "payer_entity_id": { "type": "string", "format": "uuid" },
+    "descriptor_id": { "type": "string", "format": "uuid" },
+    "connector_id": { "type": "string", "format": "uuid" },
+    "reservation_id": { "type": ["string", "null"], "format": "uuid" },
+    "billing_date": { "type": "string", "format": "date" },
+    "action_purpose": { "type": "string", "minLength": 1 },
+    "input_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "max_charge_micro_e": { "type": "string", "pattern": "^\\d+$" },
+    "final_charge_micro_e": { "type": ["string", "null"], "pattern": "^\\d+$" },
+    "status": { "enum": ["PROPOSED", "DISPATCHED", "SUCCEEDED", "FAILED", "OUTCOME_UNKNOWN", "CANCELLED"] },
+    "provider_request_id": { "type": ["string", "null"] },
+    "error_code": { "type": ["string", "null"] }
+  },
+  "additionalProperties": true
+}
