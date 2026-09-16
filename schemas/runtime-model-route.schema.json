@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/runtime-model-route.schema.json",
+  "title": "M02 versioned model route nh.v3.0",
+  "type": "object",
+  "required": ["route_id", "world_id", "agent_entity_id", "route_version", "manifest_id", "route_policy", "reason"],
+  "properties": {
+    "route_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "agent_entity_id": { "type": "string", "format": "uuid" },
+    "route_version": {
+      "anyOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string", "pattern": "^[1-9]\\d*$" }
+      ]
+    },
+    "manifest_id": { "type": "string", "format": "uuid" },
+    "route_policy": { "type": "object" },
+    "max_turn_budget_micro_e": { "type": ["string", "null"], "pattern": "^\\d+$" },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}
