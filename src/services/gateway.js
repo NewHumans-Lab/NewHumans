@@ -7,6 +7,7 @@ import { releaseReservation, settleReservation } from './economy.js';
 const ONE_MILLION = 1_000_000n;
 const RETRYABLE_HTTP = new Set([408, 429, 500, 502, 503, 504]);
 const CONFIRMED_CONNECT_FAILURES = new Set(['ENOTFOUND', 'ECONNREFUSED']);
+const BLOCKED_CONNECTOR_HOSTS = new Set(['169.254.169.254', 'metadata.google.internal', 'metadata.google.internal.', '100.100.100.200']);
 
 function problem(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -41,6 +42,8 @@ export function validateConnectorBaseUrl(baseUrl, connectorKind) {
   let parsed;
   try { parsed = new URL(baseUrl); } catch { throw problem('INVALID_CONNECTOR_URL', 'baseUrl must be an absolute URL'); }
   if (parsed.username || parsed.password || parsed.search || parsed.hash) throw problem('INVALID_CONNECTOR_URL', 'baseUrl cannot include credentials, query or fragment');
+  const hostname = parsed.hostname.toLowerCase();
+  if (BLOCKED_CONNECTOR_HOSTS.has(hostname) || hostname.startsWith('169.254.')) throw problem('INVALID_CONNECTOR_URL', 'link-local/cloud metadata endpoints are forbidden');
   if (connectorKind === 'CLOUD' && parsed.protocol !== 'https:') throw problem('INVALID_CONNECTOR_URL', 'CLOUD connectors require https');
   if (connectorKind === 'LOCAL_SELF_HOSTED' && !['http:', 'https:'].includes(parsed.protocol)) throw problem('INVALID_CONNECTOR_URL', 'LOCAL_SELF_HOSTED connectors require http or https');
   if (!['CLOUD', 'LOCAL_SELF_HOSTED'].includes(connectorKind)) throw problem('INVALID_CONNECTOR_KIND', 'unsupported connector kind');
@@ -64,7 +67,8 @@ export function extractOpenAICompatibleUsage(payload) {
   const output = usage?.completion_tokens ?? usage?.output_tokens;
   if (!Number.isInteger(input) || input < 0 || !Number.isInteger(output) || output < 0) throw problem('USAGE_UNAVAILABLE', 'provider response did not include trustworthy integer token usage', 502);
   const total = usage?.total_tokens;
-  return { inputTokens: input, outputTokens: output, totalTokens: Number.isInteger(total) && total >= 0 ? total : input + output, rawUsage: usage };
+  const totalTokens = Number.isInteger(total) && total >= 0 ? total : input + output;
+  return { inputTokens: input, outputTokens: output, totalTokens, rawUsage: { input_tokens: input, output_tokens: output, total_tokens: totalTokens } };
 }
 
 export function extractOpenAICompatibleOutput(payload) {
@@ -198,6 +202,11 @@ async function prepareExecution(pool, input) {
     parsePositiveInt(maxOutputTokens, 'maxOutputTokens');
     if (maxOutputTokens > Number(plan.max_output_tokens)) throw problem('MODEL_LIMIT_EXCEEDED', 'maxOutputTokens exceeds descriptor limit', 409);
     const maxCharge = parseNonNegativeMicroE(input.maxChargeMicroE, 'maxChargeMicroE');
+    if (plan.billing_mode === 'PLATFORM_PREPAID') {
+      const requestBytesUpperBound = BigInt(Buffer.byteLength(JSON.stringify({model:plan.model_reference,messages,max_tokens:maxOutputTokens}), 'utf8') + 64 + messages.length * 16);
+      const conservativeMaxCharge = calculateUsageCharge({inputTokens:requestBytesUpperBound,outputTokens:maxOutputTokens,inputRateMicroEPerMillion:plan.input_rate_micro_e_per_million,outputRateMicroEPerMillion:plan.output_rate_micro_e_per_million});
+      if (maxCharge < conservativeMaxCharge) throw problem('AUTHORIZATION_TOO_SMALL', `maxChargeMicroE must cover the conservative request bound of ${conservativeMaxCharge}`, 409);
+    }
     const fee = await client.query(`SELECT status FROM economy.activity_fees WHERE world_id=$1 AND activity_subject_id=$2 AND billing_date=$3`, [input.worldId,input.activitySubjectId,input.billingDate]);
     if (fee.rowCount !== 1 || fee.rows[0].status !== 'CHARGED') throw problem('DAILY_FEE_REQUIRED', 'a charged activity fee for this billing date is required before inference', 409);
     if (plan.billing_mode === 'PLATFORM_PREPAID') {
@@ -351,7 +360,7 @@ export async function infer(pool, input, { fetchImpl = globalThis.fetch } = {}) 
     if (prepared.plan.supports_idempotency) headers['idempotency-key'] = attempt.providerIdempotencyKey;
     let response;
     try {
-      response = await fetchImpl(endpoint,{method:'POST',headers,body:JSON.stringify(prepared.providerBody),signal:AbortSignal.timeout(Number(prepared.plan.timeout_ms))});
+      response = await fetchImpl(endpoint,{method:'POST',headers,body:JSON.stringify(prepared.providerBody),redirect:'manual',signal:AbortSignal.timeout(Number(prepared.plan.timeout_ms))});
     } catch (error) {
       const code = error?.cause?.code;
       const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
