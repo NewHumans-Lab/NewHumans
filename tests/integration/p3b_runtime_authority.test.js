@@ -85,8 +85,9 @@ async function readyActive(name) {
   const subject = await agent(name);
   await installRoute(subject);
   await contextReady(subject);
+  const billingDate = await currentUtcBillingDate();
   await withTransaction(pool, (client) => resumeRuntime(client, {
-    worldId: world, agentEntityId: subject.entity_id, billingDate: await currentUtcBillingDate(), actorEntityId: system.entity_id,
+    worldId: world, agentEntityId: subject.entity_id, billingDate, actorEntityId: system.entity_id,
   }));
   return subject;
 }
