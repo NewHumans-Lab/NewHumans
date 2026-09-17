@@ -85,8 +85,10 @@ BEGIN
   IF runtime.jsonb_contains_secret(COALESCE(NEW.route_policy, '{}'::jsonb)) THEN
     RAISE EXCEPTION 'route policy must not contain secret or credential material' USING ERRCODE='23514';
   END IF;
+  -- Provenance enrichment owns only route metadata. Agent/manifest ownership remains
+  -- the responsibility of the existing composite FK, so there is one authority for it.
   SELECT * INTO m FROM runtime.model_manifests
-   WHERE world_id=NEW.world_id AND agent_entity_id=NEW.agent_entity_id AND manifest_id=NEW.manifest_id;
+   WHERE world_id=NEW.world_id AND manifest_id=NEW.manifest_id;
   IF m.manifest_id IS NULL THEN
     RAISE EXCEPTION 'route manifest is not available for policy provenance' USING ERRCODE='23514';
   END IF;
