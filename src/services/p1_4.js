@@ -1,7 +1,7 @@
 import { withTransaction } from '../db.js';
 import { appendEvent, resolveActor } from './core.js';
 import { reserve, releaseReservation } from './economy.js';
-import { calculateUsageCharge, conservativeInputTokenUpperBound, infer, registerConnector } from './gateway.js';
+import { calculateUsageCharge, conservativeInputTokenUpperBound, infer, registerConnector, validateConnectorBaseUrl } from './gateway.js';
 
 function problem(code, message, status = 400) { return Object.assign(new Error(message), { code, status }); }
 function positiveInt(value, field) { if (!Number.isInteger(value) || value <= 0) throw problem('INVALID_QUOTE_INPUT', `${field} must be a positive integer`); return value; }
@@ -38,7 +38,7 @@ export async function registerConnectorP14(client,input){
   if(input.descriptorId&&input.descriptorId!==prior.descriptor_id)throw problem('CONNECTOR_REPLACEMENT_SCOPE_MISMATCH','replacement must keep the same descriptor',409);
   if(input.connectorKind&&input.connectorKind!==prior.connector_kind)throw problem('CONNECTOR_REPLACEMENT_SCOPE_MISMATCH','replacement must keep the same connector kind',409);
   if(input.billingMode&&input.billingMode!==prior.billing_mode)throw problem('CONNECTOR_REPLACEMENT_SCOPE_MISMATCH','credential rotation must not change billing mode',409);
-  if(input.baseUrl&&new URL(input.baseUrl).toString()!==new URL(prior.base_url).toString())throw problem('CONNECTOR_REPLACEMENT_SCOPE_MISMATCH','credential rotation must keep the same endpoint',409);
+  if(input.baseUrl&&validateConnectorBaseUrl(input.baseUrl,prior.connector_kind)!==prior.base_url)throw problem('CONNECTOR_REPLACEMENT_SCOPE_MISMATCH','credential rotation must keep the same endpoint',409);
   await client.query(`UPDATE gateway.connector_configs SET enabled=false WHERE world_id=$1 AND connector_id=$2`,[input.worldId,prior.connector_id]);
   const replacement=await registerConnector(client,{
     ...input,
