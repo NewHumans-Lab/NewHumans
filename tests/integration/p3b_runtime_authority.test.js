@@ -77,12 +77,17 @@ async function contextReady(subject) {
   );
 }
 
+async function currentUtcBillingDate() {
+  return (await pool.query(`SELECT (now() AT TIME ZONE 'UTC')::date::text billing_date`)).rows[0].billing_date;
+}
+
 async function readyActive(name) {
   const subject = await agent(name);
   await installRoute(subject);
   await contextReady(subject);
+  const billingDate = await currentUtcBillingDate();
   await withTransaction(pool, (client) => resumeRuntime(client, {
-    worldId: world, agentEntityId: subject.entity_id, billingDate: '2026-09-16', actorEntityId: system.entity_id,
+    worldId: world, agentEntityId: subject.entity_id, billingDate, actorEntityId: system.entity_id,
   }));
   return subject;
 }

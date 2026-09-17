@@ -1,5 +1,5 @@
 import { appendEvent, resolveActor } from './core.js';
-import { activateRuntime, claimScheduledAction, getExecutionEligibility } from './runtime_control.js';
+import { activateRuntime, claimScheduledAction, getExecutionEligibility, reconcileActiveRuntime } from './runtime_control.js';
 
 const POLICY_BLOCKING_FLAGS = new Set(['OWNER_PAUSE','NO_BUDGET','QUARANTINE','WORLD_SUSPENSION']);
 
@@ -32,6 +32,15 @@ async function subjectOrSystem(client, worldId, subjectId, actorEntityId) {
   return actor;
 }
 
+async function lockedProfile(client, worldId, subjectId) {
+  const row = (await client.query(
+    `SELECT agent_entity_id FROM runtime.agent_profiles WHERE world_id=$1 AND agent_entity_id=$2 FOR UPDATE`,
+    [worldId, subjectId],
+  )).rows[0];
+  if (!row) throw problem('RUNTIME_PROFILE_NOT_FOUND', 'runtime profile not found', 404);
+  return row;
+}
+
 async function lockedState(client, worldId, subjectId) {
   const row = (await client.query(
     `SELECT life_status,execution_status,model_status,restriction_flags,archive_status,state_version,dormant_reason,last_transition_at,updated_at
@@ -62,6 +71,11 @@ async function bumpState(client, worldId, subjectId) {
   return row.state_version;
 }
 
+async function databaseNowIso(client) {
+  const row = (await client.query(`SELECT now() current_time`)).rows[0];
+  return new Date(row.current_time).toISOString();
+}
+
 export async function getRuntimeEligibility(client, input) {
   const base = await getExecutionEligibility(client, input);
   const policyFlags = base.restriction_flags.filter((flag) => POLICY_BLOCKING_FLAGS.has(flag));
@@ -77,6 +91,9 @@ export async function getRuntimeEligibility(client, input) {
 
 export async function resumeRuntime(client, input) {
   await subjectOrSystem(client, input.worldId, input.agentEntityId, input.actorEntityId);
+  // Canonical lock order is profile -> lifecycle everywhere that may touch both rows.
+  // This matches publishModelRoute/activateRuntime and removes the old lifecycle->profile deadlock path.
+  await lockedProfile(client, input.worldId, input.agentEntityId);
   const state = await lockedState(client, input.worldId, input.agentEntityId);
   const blocking = state.restriction_flags.filter((flag) => POLICY_BLOCKING_FLAGS.has(flag));
   if (blocking.length) {
@@ -138,12 +155,28 @@ export async function setRuntimeRestriction(client, {
 export async function claimAutonomousScheduledAction(client, input) {
   await systemActor(client, input.worldId, input.actorEntityId);
   const row = (await client.query(
-    `SELECT action_kind FROM runtime.scheduled_actions WHERE world_id=$1 AND scheduled_action_id=$2`,
+    `SELECT subject_id,action_kind,status FROM runtime.scheduled_actions WHERE world_id=$1 AND scheduled_action_id=$2 FOR UPDATE`,
     [input.worldId, input.scheduledActionId],
   )).rows[0];
   if (!row) throw problem('SCHEDULED_ACTION_NOT_FOUND', 'scheduled action not found', 404);
   if (row.action_kind !== 'AUTONOMOUS_TURN') throw problem('WRONG_SCHEDULE_PATH', 'WAKE schedules must use the atomic wake scheduler path', 409);
-  return claimScheduledAction(client, input);
+  // The public claim operation is the single worker entry point. A CLAIMED row is not a
+  // second path: it is routed into the same higher-epoch recovery authority below.
+  if (row.status === 'CLAIMED') return recoverAutonomousScheduledClaim(client, input);
+
+  // V3 requires the current UTC activity fee to be handled before autonomous
+  // eligibility is evaluated. PostgreSQL is the clock authority for both this
+  // reconciliation and the database claim guard; caller-supplied `now` cannot
+  // move the Energy billing day backward or forward.
+  const authoritativeNow = await databaseNowIso(client);
+  await reconcileActiveRuntime(client, {
+    worldId: input.worldId,
+    agentEntityId: row.subject_id,
+    billingDate: authoritativeNow.slice(0, 10),
+    actorEntityId: input.actorEntityId,
+    actionId: input.actionId,
+  });
+  return claimScheduledAction(client, { ...input, now: authoritativeNow });
 }
 
 export async function recoverAutonomousScheduledClaim(client, {
@@ -161,15 +194,27 @@ export async function recoverAutonomousScheduledClaim(client, {
   if (row.status !== 'CLAIMED') throw problem('SCHEDULED_ACTION_NOT_RECOVERABLE', `scheduled action is ${row.status}`, 409);
 
   const lease = (await client.query(
-    `SELECT worker_id,lease_epoch,expires_at,released_at FROM runtime.runtime_leases
+    `SELECT worker_id,lease_epoch,released_at,(released_at IS NULL AND expires_at > now()) active
+       FROM runtime.runtime_leases
       WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
     [worldId, row.subject_id],
   )).rows[0];
-  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || lease.released_at || new Date(lease.expires_at).getTime() <= Date.now()) {
+  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || !lease.active) {
     throw problem('STALE_RUNTIME_LEASE', 'recovery worker does not hold the current active runtime lease', 409);
   }
   if (BigInt(epoch) <= BigInt(row.claimed_lease_epoch)) {
     throw problem('CLAIM_TAKEOVER_NOT_NEWER', 'claim takeover requires a strictly newer lease epoch', 409);
+  }
+
+  const authoritativeNow = await databaseNowIso(client);
+  const eligibility = await getRuntimeEligibility(client, {
+    worldId,
+    agentEntityId: row.subject_id,
+    billingDate: authoritativeNow.slice(0, 10),
+    actorEntityId,
+  });
+  if (!eligibility.can_autonomous_turn) {
+    throw problem('RUNTIME_INELIGIBLE', `claim takeover is not currently eligible: ${eligibility.reasons.join(',')}`, 409);
   }
 
   const recovered = (await client.query(
