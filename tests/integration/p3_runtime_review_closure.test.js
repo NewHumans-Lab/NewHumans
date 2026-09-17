@@ -91,8 +91,9 @@ async function readyActive(name) {
   const agent = await makeAgent(name);
   const model = await installRoute(agent, name);
   await contextReady(agent);
+  const date = await currentUtcDate();
   await withTransaction(pool, (client) => resumeRuntime(client, {
-    worldId: world, agentEntityId: agent.entity_id, billingDate: await currentUtcDate(), actorEntityId: system.entity_id,
+    worldId: world, agentEntityId: agent.entity_id, billingDate: date, actorEntityId: system.entity_id,
   }));
   return { agent, ...model };
 }
@@ -255,9 +256,10 @@ test('WAKE cannot reach a terminal status without canonical scheduler evidence',
     ),
     /authoritative scheduler execution evidence/,
   );
+  const date = await currentUtcDate();
   const result = await withTransaction(pool, (client) => runDueWakeScheduledAction(client, {
     worldId: world, scheduledActionId: scheduled.scheduled_action_id, workerId: 'wake-worker',
-    billingDate: await currentUtcDate(), now: new Date().toISOString(), actorEntityId: system.entity_id,
+    billingDate: date, now: new Date().toISOString(), actorEntityId: system.entity_id,
   }));
   assert.equal(result.result, 'COMPLETED');
   assert.equal((await pool.query(
