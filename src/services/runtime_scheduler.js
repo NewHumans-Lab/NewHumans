@@ -35,6 +35,19 @@ async function bumpState(client, worldId, subjectId) {
   return row.state_version;
 }
 
+async function recordWakeEvidence(client, {
+  worldId, scheduledActionId, subjectId, outcome, workerId, billingDate = null,
+  lifecycleStateVersion = null, blockedReason = null, actionId = null, actorEntityId,
+}) {
+  return (await client.query(
+    `INSERT INTO runtime.scheduled_wake_executions
+      (world_id,scheduled_action_id,subject_id,outcome,worker_id,billing_date,lifecycle_state_version,blocked_reason,action_id,created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING wake_execution_id,created_at`,
+    [worldId, scheduledActionId, subjectId, outcome, workerId, billingDate, lifecycleStateVersion, blockedReason, actionId, actorEntityId],
+  )).rows[0];
+}
+
 const BLOCKABLE = new Set([
   'M03_CONTEXT_UNAVAILABLE',
   'RUNTIME_RESTRICTED',
@@ -67,6 +80,10 @@ export async function runDueWakeScheduledAction(client, {
 
   if (row.latest_run_at && new Date(nowIso) > new Date(row.latest_run_at) && row.missed_policy === 'SKIP') {
     const stateVersion = await bumpState(client, worldId, row.subject_id);
+    await recordWakeEvidence(client, {
+      worldId, scheduledActionId, subjectId: row.subject_id, outcome: 'MISSED', workerId,
+      lifecycleStateVersion: stateVersion, actionId, actorEntityId: actor.entity_id,
+    });
     const missed = (await client.query(
       `UPDATE runtime.scheduled_actions
           SET status='MISSED',claimed_by_worker=$3,claimed_at=now(),completed_at=now(),updated_at=now()
@@ -90,6 +107,10 @@ export async function runDueWakeScheduledAction(client, {
       actorEntityId: actor.entity_id,
       actionId,
     });
+    await recordWakeEvidence(client, {
+      worldId, scheduledActionId, subjectId: row.subject_id, outcome: 'COMPLETED', workerId,
+      billingDate, lifecycleStateVersion: activation.lifecycle.state_version, actionId, actorEntityId: actor.entity_id,
+    });
     const completed = (await client.query(
       `UPDATE runtime.scheduled_actions
           SET status='COMPLETED',claimed_by_worker=$3,claimed_at=now(),completed_at=now(),updated_at=now(),blocked_reason=NULL
@@ -105,6 +126,10 @@ export async function runDueWakeScheduledAction(client, {
   } catch (error) {
     if (!BLOCKABLE.has(error.code)) throw error;
     const stateVersion = await bumpState(client, worldId, row.subject_id);
+    await recordWakeEvidence(client, {
+      worldId, scheduledActionId, subjectId: row.subject_id, outcome: 'BLOCKED', workerId,
+      lifecycleStateVersion: stateVersion, blockedReason: error.code, actionId, actorEntityId: actor.entity_id,
+    });
     const blocked = (await client.query(
       `UPDATE runtime.scheduled_actions
           SET status='BLOCKED',claimed_by_worker=$3,claimed_at=now(),completed_at=now(),blocked_reason=$4,updated_at=now()
