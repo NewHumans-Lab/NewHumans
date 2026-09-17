@@ -206,6 +206,17 @@ export async function recoverAutonomousScheduledClaim(client, {
     throw problem('CLAIM_TAKEOVER_NOT_NEWER', 'claim takeover requires a strictly newer lease epoch', 409);
   }
 
+  const authoritativeNow = await databaseNowIso(client);
+  const eligibility = await getRuntimeEligibility(client, {
+    worldId,
+    agentEntityId: row.subject_id,
+    billingDate: authoritativeNow.slice(0, 10),
+    actorEntityId,
+  });
+  if (!eligibility.can_autonomous_turn) {
+    throw problem('RUNTIME_INELIGIBLE', `claim takeover is not currently eligible: ${eligibility.reasons.join(',')}`, 409);
+  }
+
   const recovered = (await client.query(
     `UPDATE runtime.scheduled_actions
         SET claimed_by_worker=$3,claimed_lease_epoch=$4,claimed_at=now(),updated_at=now()
