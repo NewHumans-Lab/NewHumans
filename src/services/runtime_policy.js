@@ -1,5 +1,5 @@
 import { appendEvent, resolveActor } from './core.js';
-import { activateRuntime, claimScheduledAction, getExecutionEligibility } from './runtime_control.js';
+import { activateRuntime, claimScheduledAction, getExecutionEligibility, reconcileActiveRuntime } from './runtime_control.js';
 
 const POLICY_BLOCKING_FLAGS = new Set(['OWNER_PAUSE','NO_BUDGET','QUARANTINE','WORLD_SUSPENSION']);
 
@@ -155,7 +155,7 @@ export async function setRuntimeRestriction(client, {
 export async function claimAutonomousScheduledAction(client, input) {
   await systemActor(client, input.worldId, input.actorEntityId);
   const row = (await client.query(
-    `SELECT action_kind,status FROM runtime.scheduled_actions WHERE world_id=$1 AND scheduled_action_id=$2 FOR UPDATE`,
+    `SELECT subject_id,action_kind,status FROM runtime.scheduled_actions WHERE world_id=$1 AND scheduled_action_id=$2 FOR UPDATE`,
     [input.worldId, input.scheduledActionId],
   )).rows[0];
   if (!row) throw problem('SCHEDULED_ACTION_NOT_FOUND', 'scheduled action not found', 404);
@@ -163,10 +163,19 @@ export async function claimAutonomousScheduledAction(client, input) {
   // The public claim operation is the single worker entry point. A CLAIMED row is not a
   // second path: it is routed into the same higher-epoch recovery authority below.
   if (row.status === 'CLAIMED') return recoverAutonomousScheduledClaim(client, input);
-  // A current autonomous claim is a real-world execution decision. Its due/eligibility
-  // clock is therefore PostgreSQL, the same authority used by the database guard.
-  // Caller-supplied `now` cannot move the Energy billing day backward or forward.
+
+  // V3 requires the current UTC activity fee to be handled before autonomous
+  // eligibility is evaluated. PostgreSQL is the clock authority for both this
+  // reconciliation and the database claim guard; caller-supplied `now` cannot
+  // move the Energy billing day backward or forward.
   const authoritativeNow = await databaseNowIso(client);
+  await reconcileActiveRuntime(client, {
+    worldId: input.worldId,
+    agentEntityId: row.subject_id,
+    billingDate: authoritativeNow.slice(0, 10),
+    actorEntityId: input.actorEntityId,
+    actionId: input.actionId,
+  });
   return claimScheduledAction(client, { ...input, now: authoritativeNow });
 }
 
