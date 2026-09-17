@@ -71,6 +71,11 @@ async function bumpState(client, worldId, subjectId) {
   return row.state_version;
 }
 
+async function databaseNowIso(client) {
+  const row = (await client.query(`SELECT now() current_time`)).rows[0];
+  return new Date(row.current_time).toISOString();
+}
+
 export async function getRuntimeEligibility(client, input) {
   const base = await getExecutionEligibility(client, input);
   const policyFlags = base.restriction_flags.filter((flag) => POLICY_BLOCKING_FLAGS.has(flag));
@@ -158,7 +163,11 @@ export async function claimAutonomousScheduledAction(client, input) {
   // The public claim operation is the single worker entry point. A CLAIMED row is not a
   // second path: it is routed into the same higher-epoch recovery authority below.
   if (row.status === 'CLAIMED') return recoverAutonomousScheduledClaim(client, input);
-  return claimScheduledAction(client, input);
+  // A current autonomous claim is a real-world execution decision. Its due/eligibility
+  // clock is therefore PostgreSQL, the same authority used by the database guard.
+  // Caller-supplied `now` cannot move the Energy billing day backward or forward.
+  const authoritativeNow = await databaseNowIso(client);
+  return claimScheduledAction(client, { ...input, now: authoritativeNow });
 }
 
 export async function recoverAutonomousScheduledClaim(client, {
