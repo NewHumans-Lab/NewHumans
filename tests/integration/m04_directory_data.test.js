@@ -60,8 +60,12 @@ test('all M04 directory foreign keys target only the existing Entity authority',
   const fks = await pool.query(
     `SELECT c.conname, c.confrelid::regclass::text AS target
        FROM pg_constraint c
-       JOIN pg_namespace n ON n.oid = c.connamespace
-      WHERE n.nspname='social' AND c.contype='f'
+      WHERE c.contype='f'
+        AND c.conrelid IN (
+          'social.directory_profiles'::regclass,
+          'social.contact_preferences'::regclass,
+          'social.ability_evidence'::regclass
+        )
       ORDER BY c.conname`,
   );
   assert.equal(fks.rowCount, 3);
