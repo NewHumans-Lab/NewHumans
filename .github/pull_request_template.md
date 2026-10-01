@@ -25,9 +25,12 @@ List tests and final-head CI evidence. Tests prove the reviewed design; they do 
 <!-- Keep every machine-readable field exactly once. Do not rename labels. -->
 Task-ID: TODO
 Scope: TODO
+Allowed-Paths:
+- REPLACE_WITH_REPOSITORY_PATH
 Tests: TODO
 Self-Review: APPROVED
 Known-Limitations: NONE
 Merge-SHA: PENDING
 
+<!-- Allowed-Paths accepts exact repository-relative files or directory-prefix patterns ending in /**. Shared protected paths require trusted base-branch task registration and cannot be self-authorized by widening this PR body. -->
 <!-- Before merge, Merge-SHA must remain PENDING. After GitHub merges the PR, edit this PR body and replace PENDING with the exact 40-character merge commit SHA. The final acceptance check must then pass. -->
