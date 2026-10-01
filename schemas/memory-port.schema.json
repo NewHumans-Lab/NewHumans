@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/memory-port.schema.json",
+  "title": "MemoryPort nh.v3.0",
+  "description": "NewHumans boundary contract for authoritative durable memory hosted by Knowledge Ball.",
+  "oneOf": [
+    { "$ref": "#/$defs/recallRequest" },
+    { "$ref": "#/$defs/appendExperienceCommand" },
+    { "$ref": "#/$defs/updateRelationCommand" },
+    { "$ref": "#/$defs/historyRequest" },
+    { "$ref": "#/$defs/recallResponse" },
+    { "$ref": "#/$defs/writeReceipt" },
+    { "$ref": "#/$defs/historyResponse" }
+  ],
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "worldId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "cursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "Opaque Knowledge Ball cursor; callers must not decode or synthesize it."
+    },
+    "sourceProvenance": {
+      "type": "object",
+      "required": ["source_id", "source_kind", "source_authority", "recorded_at", "executor_entity_id"],
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "source_kind": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "source_authority": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "executor_entity_id": { "$ref": "#/$defs/uuid" },
+        "world_event_id": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "upstream_source_id": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "content_digest": { "type": "string", "minLength": 1, "maxLength": 512 }
+      },
+      "additionalProperties": true
+    },
+    "timeRange": {
+      "type": "object",
+      "properties": {
+        "from": { "type": "string", "format": "date-time" },
+        "to": { "type": "string", "format": "date-time" }
+      },
+      "minProperties": 1,
+      "additionalProperties": false
+    },
+    "commonRequestProperties": {
+      "type": "object",
+      "properties": {
+        "schema_version": { "const": "nh.v3.0" },
+        "port": { "const": "MemoryPort" },
+        "authority": { "const": "KNOWLEDGE_BALL" },
+        "world_id": { "$ref": "#/$defs/worldId" },
+        "subject_id": { "$ref": "#/$defs/uuid" },
+        "actor_entity_id": { "$ref": "#/$defs/uuid" },
+        "subject_binding": { "enum": ["SELF", "HPA"] }
+      }
+    },
+    "recallRequest": {
+      "type": "object",
+      "required": ["schema_version", "port", "authority", "world_id", "operation", "subject_id", "actor_entity_id", "subject_binding", "query"],
+      "properties": {
+        "schema_version": { "const": "nh.v3.0" },
+        "port": { "const": "MemoryPort" },
+        "authority": { "const": "KNOWLEDGE_BALL" },
+        "world_id": { "$ref": "#/$defs/worldId" },
+        "operation": { "const": "recall" },
+        "subject_id": { "$ref": "#/$defs/uuid" },
+        "actor_entity_id": { "$ref": "#/$defs/uuid" },
+        "subject_binding": { "enum": ["SELF", "HPA"] },
+        "query": { "type": "object", "minProperties": 1, "additionalProperties": true },
+        "cursor": { "$ref": "#/$defs/cursor" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
+        "time_range": { "$ref": "#/$defs/timeRange" }
+      },
+      "additionalProperties": false
+    },
+    "appendExperienceCommand": {
+      "type": "object",
+      "required": ["schema_version", "port", "authority", "world_id", "operation", "subject_id", "actor_entity_id", "subject_binding", "idempotency_key", "occurred_at", "experience", "provenance"],
+      "properties": {
+        "schema_version": { "const": "nh.v3.0" },
+        "port": { "const": "MemoryPort" },
+        "authority": { "const": "KNOWLEDGE_BALL" },
+        "world_id": { "$ref": "#/$defs/worldId" },
+        "operation": { "const": "append_experience" },
+        "subject_id": { "$ref": "#/$defs/uuid" },
+        "actor_entity_id": { "$ref": "#/$defs/uuid" },
+        "subject_binding": { "enum": ["SELF", "HPA"] },
+        "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "experience": { "type": "object", "minProperties": 1, "additionalProperties": true },
+        "provenance": { "$ref": "#/$defs/sourceProvenance" }
+      },
+      "additionalProperties": false
+    },
+    "updateRelationCommand": {
+      "type": "object",
+      "required": ["schema_version", "port", "authority", "world_id", "operation", "subject_id", "actor_entity_id", "subject_binding", "idempotency_key", "relation", "provenance"],
+      "properties": {
+        "schema_version": { "const": "nh.v3.0" },
+        "port": { "const": "MemoryPort" },
+        "authority": { "const": "KNOWLEDGE_BALL" },
+        "world_id": { "$ref": "#/$defs/worldId" },
+        "operation": { "const": "update_relation" },
+        "subject_id": { "$ref": "#/$defs/uuid" },
+        "actor_entity_id": { "$ref": "#/$defs/uuid" },
+        "subject_binding": { "enum": ["SELF", "HPA"] },
+        "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "expected_version": { "type": "integer", "minimum": 0 },
+        "relation": { "type": "object", "minProperties": 1, "additionalProperties": true },
+        "provenance": { "$ref": "#/$defs/sourceProvenance" }
+      },
+      "additionalProperties": false
+    },
+    "historyRequest": {
+      "type": "object",
+      "required": ["schema_version", "port", "authority", "world_id", "operation", "subject_id", "actor_entity_id", "subject_binding"],
+      "properties": {
+        "schema_version": { "const": "nh.v3.0" },
+        "port": { "const": "MemoryPort" },
+        "authority": { "const": "KNOWLEDGE_BALL" },
+        "world_id": { "$ref": "#/$defs/worldId" },
+        "operation": { "const": "history" },
+        "subject_id": { "$ref": "#/$defs/uuid" },
+        "actor_entity_id": { "$ref": "#/$defs/uuid" },
+        "subject_binding": { "enum": ["SELF", "HPA"] },
+        "cursor": { "$ref": "#/$defs/cursor" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
+        "from": { "type": "string", "format": "date-time" },
+        "to": { "type": "string", "format": "date-time" },
+        "kind": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "additionalProperties": false
+    },
+    "recallResponse": {
+      "type": "object",
+      "required": ["schema_version", "port", "authority", "world_id", "operation", "subject_id", "items", "next_cursor"],
+      "properties": {
+        "schema_version": { "const": "nh.v3.0" },
+        "port": { "const": "MemoryPort" },
+        "authority": { "const": "KNOWLEDGE_BALL" },
+        "world_id": { "$ref": "#/$defs/worldId" },
+        "operation": { "const": "recall_result" },
+        "subject_id": { "$ref": "#/$defs/uuid" },
+        "items": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "next_cursor": { "oneOf": [{ "$ref": "#/$defs/cursor" }, { "type": "null" }] },
+        "provider_snapshot": { "type": "string", "minLength": 1, "maxLength": 512 }
+      },
+      "additionalProperties": true
+    },
+    "writeReceipt": {
+      "type": "object",
+      "required": ["schema_version", "port", "authority", "world_id", "operation", "subject_id", "idempotency_key", "record_id"],
+      "properties": {
+        "schema_version": { "const": "nh.v3.0" },
+        "port": { "const": "MemoryPort" },
+        "authority": { "const": "KNOWLEDGE_BALL" },
+        "world_id": { "$ref": "#/$defs/worldId" },
+        "operation": { "enum": ["append_experience_result", "update_relation_result"] },
+        "subject_id": { "$ref": "#/$defs/uuid" },
+        "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "record_id": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "version": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "historyResponse": {
+      "type": "object",
+      "required": ["schema_version", "port", "authority", "world_id", "operation", "subject_id", "entries", "next_cursor"],
+      "properties": {
+        "schema_version": { "const": "nh.v3.0" },
+        "port": { "const": "MemoryPort" },
+        "authority": { "const": "KNOWLEDGE_BALL" },
+        "world_id": { "$ref": "#/$defs/worldId" },
+        "operation": { "const": "history_result" },
+        "subject_id": { "$ref": "#/$defs/uuid" },
+        "entries": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "next_cursor": { "oneOf": [{ "$ref": "#/$defs/cursor" }, { "type": "null" }] }
+      },
+      "additionalProperties": true
+    }
+  }
+}
