@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/object-license.schema.json",
+  "title": "M04 ObjectLicense nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "license_ref_id",
+    "object_id",
+    "object_version_id",
+    "license_expression",
+    "granted_by_entity_id",
+    "permissions",
+    "effective_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "license_ref_id": { "type": "string", "format": "uuid" },
+    "object_id": { "type": "string", "format": "uuid" },
+    "object_version_id": { "type": ["string", "null"], "format": "uuid" },
+    "license_expression": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "granted_by_entity_id": { "type": "string", "format": "uuid" },
+    "permissions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["READ", "USE", "MODIFY", "REDISTRIBUTE", "COMMERCIAL_USE", "EXECUTE"]
+      }
+    },
+    "terms_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 2048 },
+    "effective_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "additionalProperties": false
+}

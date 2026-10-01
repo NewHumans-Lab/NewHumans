@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/object-contribution.schema.json",
+  "title": "M04 ObjectContribution nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "contribution_id",
+    "object_id",
+    "object_version_id",
+    "contributor_entity_id",
+    "contribution_kind",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "contribution_id": { "type": "string", "format": "uuid" },
+    "object_id": { "type": "string", "format": "uuid" },
+    "object_version_id": { "type": "string", "format": "uuid" },
+    "contributor_entity_id": { "type": "string", "format": "uuid" },
+    "contribution_kind": {
+      "enum": ["AUTHOR", "EDITOR", "CODE", "DATA", "DESIGN", "RESEARCH", "REVIEW", "OTHER"]
+    },
+    "description": { "type": ["string", "null"], "maxLength": 10000 },
+    "contribution_digest": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
