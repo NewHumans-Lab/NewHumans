@@ -269,7 +269,7 @@ async function api(req,res,url){
   if(req.method==='POST'&&scheduleClaimMatch){
     const input=await body(req);input.scheduledActionId=scheduleClaimMatch[1];
     const command=canonicalCommand(req,input,'runtime.claim_autonomous_schedule');
-    const out=await runCommand(pool,command.run,(client,ctx)=>claimAutonomousScheduledAction(client,{...command.data,actorEntityId:ctx.actor.entity_id}));
+    const out=await runCommand(pool,command.run,(client,ctx)=>claimAutonomousScheduledAction(client,{...command.data,actorEntityId:ctx.actor.entity_id,actionId:ctx.actionId}));
     return json(res,200,out);
   }
   const scheduleCompleteMatch=url.pathname.match(/^\/api\/v1\/runtime\/schedules\/([0-9a-f-]+)\/complete$/);
