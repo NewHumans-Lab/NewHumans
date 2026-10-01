@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/world-object.schema.json",
+  "title": "M04 WorldObject nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "object_id",
+    "world_id",
+    "object_type",
+    "created_by_entity_id",
+    "control_ref",
+    "current_version_id",
+    "version",
+    "lifecycle_status"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "object_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "object_type": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "created_by_entity_id": { "type": "string", "format": "uuid" },
+    "control_ref": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Opaque reference to M01-owned control/authorization state; this record is not identity authority."
+    },
+    "current_version_id": { "type": ["string", "null"], "format": "uuid" },
+    "version": { "type": "integer", "minimum": 1 },
+    "lifecycle_status": { "enum": ["DRAFT", "PUBLISHED", "ARCHIVED", "REDACTED"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
