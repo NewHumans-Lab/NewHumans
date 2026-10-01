@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/contract-dispute.schema.json",
+  "title": "M04 contract dispute nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "dispute_id",
+    "contract_id",
+    "contract_version",
+    "opened_by_entity_id",
+    "reason",
+    "evidence_refs",
+    "status",
+    "kb_settlement_ref",
+    "opened_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "dispute_id": { "type": "string", "format": "uuid" },
+    "contract_id": { "type": "string", "format": "uuid" },
+    "contract_version": { "type": "integer", "minimum": 1 },
+    "opened_by_entity_id": { "type": "string", "format": "uuid" },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 20000 },
+    "evidence_refs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 2000 }
+    },
+    "status": { "enum": ["OPEN", "UNDER_REVIEW", "RESOLVED", "CANCELLED"] },
+    "resolution": { "type": ["string", "null"], "maxLength": 20000 },
+    "kb_settlement_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 2000 },
+    "opened_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "RESOLVED" } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["resolution"],
+        "properties": {
+          "resolution": { "type": "string", "minLength": 1, "maxLength": 20000 },
+          "kb_settlement_ref": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}

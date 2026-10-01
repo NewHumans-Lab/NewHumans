@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/contract-delivery.schema.json",
+  "title": "M04 contract delivery nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "delivery_id",
+    "contract_id",
+    "contract_version",
+    "submitted_by_entity_id",
+    "attempt",
+    "artifact_refs",
+    "status",
+    "submitted_at",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "delivery_id": { "type": "string", "format": "uuid" },
+    "contract_id": { "type": "string", "format": "uuid" },
+    "contract_version": { "type": "integer", "minimum": 1 },
+    "submitted_by_entity_id": { "type": "string", "format": "uuid" },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "artifact_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1, "maxLength": 2000 }
+    },
+    "status": { "enum": ["SUBMITTED", "ACCEPTED", "REJECTED"] },
+    "submitted_at": { "type": "string", "format": "date-time" },
+    "reviewed_at": { "type": ["string", "null"], "format": "date-time" },
+    "reviewed_by_entity_id": { "type": ["string", "null"], "format": "uuid" },
+    "rejection_criterion_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 200 }
+  },
+  "additionalProperties": true
+}

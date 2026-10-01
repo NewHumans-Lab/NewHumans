@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/contract.schema.json",
+  "title": "M04 contract nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "contract_id",
+    "world_id",
+    "employer_entity_id",
+    "contractor_entity_id",
+    "current_version",
+    "status",
+    "kb_escrow_ref",
+    "kb_prepayment_ref",
+    "kb_settlement_ref",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "contract_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "employer_entity_id": { "type": "string", "format": "uuid" },
+    "contractor_entity_id": { "type": "string", "format": "uuid" },
+    "current_version": { "type": "integer", "minimum": 1 },
+    "status": {
+      "enum": ["PROPOSED", "ACTIVE", "SUBMITTED", "DISPUTED", "SETTLED", "CANCELLED"]
+    },
+    "kb_escrow_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 2000 },
+    "kb_prepayment_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 2000 },
+    "kb_settlement_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 2000 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "enum": ["ACTIVE", "SUBMITTED", "DISPUTED", "SETTLED"] }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "kb_escrow_ref": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "SETTLED" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "kb_settlement_ref": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}
