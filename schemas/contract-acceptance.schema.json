@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/contract-acceptance.schema.json",
+  "title": "M04 contract acceptance nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "acceptance_id",
+    "contract_id",
+    "contract_version",
+    "party_entity_id",
+    "party_role",
+    "terms_digest",
+    "accepted_at",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "acceptance_id": { "type": "string", "format": "uuid" },
+    "contract_id": { "type": "string", "format": "uuid" },
+    "contract_version": { "type": "integer", "minimum": 1 },
+    "party_entity_id": { "type": "string", "format": "uuid" },
+    "party_role": { "enum": ["EMPLOYER", "CONTRACTOR"] },
+    "terms_digest": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+    "accepted_at": { "type": "string", "format": "date-time" },
+    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 200 }
+  },
+  "additionalProperties": true
+}
