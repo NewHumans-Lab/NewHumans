@@ -10,9 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Enforce task PR scope
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-pr-scope.js
       - name: Enforce PERFECT_REPLACEMENT audit
         if: github.event_name == 'pull_request'
         run: node scripts/check-replacement-audit.js
@@ -102,9 +107,14 @@ jobs:
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Enforce task PR scope
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-pr-scope.js
       - name: Enforce PERFECT_REPLACEMENT audit
         if: github.event_name == 'pull_request'
         run: node scripts/check-replacement-audit.js
