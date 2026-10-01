@@ -4,9 +4,13 @@ import path from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { assertExternalAuthorityDependencies } from './check-external-authority-dependencies.js';
+import { validateMigrationNames } from './migration-policy.js';
 
 function walk(dir){return fs.readdirSync(dir,{withFileTypes:true}).flatMap((entry)=>{const p=path.join(dir,entry.name);return entry.isDirectory()?walk(p):[p]})}
 for(const file of [...walk('src'),...walk('scripts'),...walk('tests')].filter((f)=>f.endsWith('.js'))) execFileSync(process.execPath,['--check',file],{stdio:'inherit'});
+
+const migrationFiles=fs.readdirSync('migrations',{withFileTypes:true}).filter((entry)=>entry.isFile()&&entry.name.endsWith('.sql')).map((entry)=>entry.name);
+validateMigrationNames(migrationFiles);
 
 const ajv=new Ajv2020({allErrors:true,strict:true});
 addFormats(ajv);
@@ -15,4 +19,4 @@ for(const file of walk('schemas').filter((f)=>f.endsWith('.json'))){
   ajv.compile(schema);
 }
 assertExternalAuthorityDependencies();
-console.log('syntax, JSON Schema, and external authority dependency checks passed');
+console.log(`syntax, migration namespace, JSON Schema, and external authority dependency checks passed (${migrationFiles.length} migrations)`);
