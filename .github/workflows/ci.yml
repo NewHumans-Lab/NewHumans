@@ -3,8 +3,86 @@ on:
   pull_request:
   push:
     branches: [main]
+
 jobs:
-  test:
+  preflight:
+    name: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enforce PERFECT_REPLACEMENT audit
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-replacement-audit.js
+      - run: npm install
+      - run: npm run check
+
+  unit-shard:
+    name: unit shard ${{ matrix.shard }}/2
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1
+            index: 0
+          - shard: 2
+            index: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Run unit shard
+        run: node scripts/run-test-shard.js unit ${{ matrix.index }} 2
+
+  integration-shard:
+    name: integration shard ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1
+            index: 0
+          - shard: 2
+            index: 1
+          - shard: 3
+            index: 2
+          - shard: 4
+            index: 3
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: newhumans
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d newhumans"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/newhumans
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run migrate
+      - name: Run integration shard
+        run: node scripts/run-test-shard.js integration ${{ matrix.index }} 4
+
+  full-gate:
+    name: full test gate
+    needs: [preflight, unit-shard, integration-shard]
     runs-on: ubuntu-latest
     services:
       postgres:
