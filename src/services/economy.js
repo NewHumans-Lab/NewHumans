@@ -1,3 +1,15 @@
+/**
+ * @legacy NH-012
+ * Frozen NewHumans-local economy retained only for regression/development compatibility.
+ * New production economy behavior belongs behind the Knowledge Ball EconomyPort and must
+ * never fall back to this module.
+ */
+if (process.env.NODE_ENV === 'production') {
+  throw Object.assign(new Error('Legacy NewHumans economy is disabled in production; use the Knowledge Ball EconomyPort'), {
+    code: 'LEGACY_ECONOMY_PRODUCTION_DISABLED',
+  });
+}
+
 import { activationDecision, activityEligibility, parseMicroE } from '../domain/energy.js';
 import { DAILY_ACTIVITY_FEE_MICRO_E } from '../shared/constants.js';
 import { appendEvent } from './core.js';
