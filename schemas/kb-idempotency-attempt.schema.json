@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/kb-idempotency-attempt.schema.json",
+  "title": "Knowledge Ball cross-product idempotency attempt",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "authority",
+    "world_id",
+    "actor_entity_id",
+    "operation",
+    "operation_class",
+    "origin_product",
+    "idempotency_key",
+    "request_id",
+    "correlation_id",
+    "payload_digest",
+    "payload",
+    "attempt_number",
+    "retry_budget",
+    "scope_key"
+  ],
+  "properties": {
+    "contract_version": { "const": "nh.kb-idempotency.v1" },
+    "authority": { "const": "knowledge-ball" },
+    "world_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "actor_entity_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "operation": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "operation_class": { "enum": ["READ", "WRITE", "FUNDS_WRITE"] },
+    "origin_product": { "enum": ["newhumans", "knowledge-ball"] },
+    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "request_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "correlation_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "payload_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "payload": { "type": "object" },
+    "attempt_number": { "type": "integer", "minimum": 1 },
+    "retry_budget": { "type": "integer", "minimum": 0 },
+    "scope_key": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}
