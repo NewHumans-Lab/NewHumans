@@ -1,0 +1,45 @@
+name: Web Bootstrap CI
+
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - '.github/workflows/web.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/web.yml'
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: npm install
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Production smoke test
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/newhumans-web-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:4173/ | grep --quiet '<div id="root"></div>'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/newhumans-web-preview.log
+          exit 1
