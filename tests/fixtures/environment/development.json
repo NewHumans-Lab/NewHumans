@@ -1,0 +1,6 @@
+{
+  "DATABASE_URL": "postgres://postgres:postgres@localhost:5432/newhumans",
+  "NODE_ENV": "development",
+  "KB_PROVIDER": "knowledge-ball",
+  "KB_ENDPOINT": "http://127.0.0.1:8787"
+}
