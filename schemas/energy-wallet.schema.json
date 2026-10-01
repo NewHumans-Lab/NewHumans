@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://newhumans.world/schemas/energy-wallet.schema.json",
-  "title": "Energy wallet nh.v3.0",
+  "title": "Legacy Energy wallet nh.v3.0",
+  "$comment": "NH-012: Legacy NewHumans economy schema. Frozen for regression/dev compatibility; do not extend for new business. Production Knowledge Ball economy must use EconomyPort and must not fall back to this schema.",
   "type": "object",
   "required": ["world_id", "entity_id", "posted_balance_micro_e", "reserved_micro_e", "frozen_micro_e", "available_micro_e"],
   "properties": {
