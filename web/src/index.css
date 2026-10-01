@@ -1,0 +1,13 @@
+html,
+body,
+#root,
+#app-shell {
+  min-height: 100%;
+  margin: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
