@@ -6,9 +6,12 @@ import {
   validateAppliedMigrationMetadata,
   validateMigrationFiles,
 } from './migration-order.js';
+import { validateMigrationNames } from './migration-policy.js';
 
 const dir = fileURLToPath(new URL('../migrations/', import.meta.url));
-const files = validateMigrationFiles(await fs.readdir(dir));
+const directoryEntries = await fs.readdir(dir);
+validateMigrationNames(directoryEntries.filter((name) => name.endsWith('.sql')));
+const files = validateMigrationFiles(directoryEntries);
 
 const pool = createPool();
 try {
