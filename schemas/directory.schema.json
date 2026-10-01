@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/directory.schema.json",
+  "title": "M04 Public directory entry nh.v3.0",
+  "type": "object",
+  "required": ["schema_version", "world_id", "entity", "profile", "activity_hint", "evidence"],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "entity": {
+      "type": "object",
+      "required": ["entity_id", "display_name", "entity_type", "identity_status", "source_module"],
+      "properties": {
+        "entity_id": { "type": "string", "format": "uuid" },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "entity_type": { "enum": ["HUMAN", "AGENT", "COMPANY", "ORGANIZATION"] },
+        "identity_status": { "enum": ["ACTIVE", "SUSPENDED", "RETIRED"] },
+        "source_module": { "const": "M01" }
+      },
+      "additionalProperties": false
+    },
+    "profile": {
+      "type": "object",
+      "required": [
+        "profile_id",
+        "entity_id",
+        "services",
+        "availability",
+        "collaboration_preferences",
+        "contact_rules",
+        "accepts_new_work",
+        "updated_at"
+      ],
+      "properties": {
+        "profile_id": { "type": "string", "format": "uuid" },
+        "entity_id": { "type": "string", "format": "uuid" },
+        "headline": { "type": ["string", "null"], "maxLength": 240 },
+        "summary": { "type": ["string", "null"], "maxLength": 4000 },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["service_key", "title", "domains"],
+            "properties": {
+              "service_key": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+              "description": { "type": ["string", "null"], "maxLength": 2000 },
+              "domains": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "availability": {
+          "type": "object",
+          "required": ["status"],
+          "properties": {
+            "status": { "enum": ["AVAILABLE", "LIMITED", "UNAVAILABLE", "UNKNOWN"] },
+            "available_from": {
+              "anyOf": [
+                { "type": "string", "format": "date-time" },
+                { "type": "null" }
+              ]
+            },
+            "note": { "type": ["string", "null"], "maxLength": 500 }
+          },
+          "additionalProperties": false
+        },
+        "collaboration_preferences": {
+          "type": "object",
+          "required": ["languages", "task_domains", "work_modes"],
+          "properties": {
+            "languages": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+            },
+            "task_domains": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+            },
+            "work_modes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["ASYNC", "SYNC", "EITHER"] }
+            }
+          },
+          "additionalProperties": false
+        },
+        "contact_rules": {
+          "type": "object",
+          "required": ["allow_unknown_senders", "accepts_inbound_offers", "allowed_message_types"],
+          "properties": {
+            "allow_unknown_senders": { "type": "boolean" },
+            "accepts_inbound_offers": { "type": "boolean" },
+            "allowed_message_types": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+            }
+          },
+          "additionalProperties": false
+        },
+        "accepts_new_work": { "type": "boolean" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "activity_hint": {
+      "type": "object",
+      "required": ["state", "source_module"],
+      "properties": {
+        "state": { "enum": ["ACTIVE", "DORMANT", "UNAVAILABLE", "NOT_APPLICABLE", "UNKNOWN"] },
+        "source_module": { "const": "M02" },
+        "observed_at": {
+          "anyOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "entity_id",
+          "evidence_type",
+          "task_domain",
+          "task_difficulty",
+          "sample_size",
+          "outcome",
+          "rework_count",
+          "duration_ms",
+          "cost_micro_e",
+          "reproduction_status",
+          "interest_relationships",
+          "created_at"
+        ],
+        "properties": {
+          "evidence_id": { "type": "string", "format": "uuid" },
+          "entity_id": { "type": "string", "format": "uuid" },
+          "evidence_type": {
+            "enum": [
+              "SELF_CLAIM",
+              "WORK_PRODUCT",
+              "CONTRACT_PERFORMANCE",
+              "AUTOMATED_TEST",
+              "COUNTERPARTY_REVIEW",
+              "INDEPENDENT_REVIEW"
+            ]
+          },
+          "task_domain": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "task_difficulty": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "sample_size": { "type": "integer", "minimum": 1 },
+          "outcome": {
+            "type": "object",
+            "required": ["status", "summary"],
+            "properties": {
+              "status": { "enum": ["PASS", "FAIL", "PARTIAL", "NOT_APPLICABLE"] },
+              "summary": { "type": "string", "minLength": 1, "maxLength": 4000 }
+            },
+            "additionalProperties": false
+          },
+          "rework_count": { "type": "integer", "minimum": 0 },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "cost_micro_e": { "type": "string", "pattern": "^(0|[1-9]\\d*)$" },
+          "reproduction_status": {
+            "enum": ["NOT_APPLICABLE", "PENDING", "REPRODUCED", "PARTIAL", "FAILED"]
+          },
+          "interest_relationships": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+          },
+          "source_ref": { "type": ["string", "null"], "maxLength": 2048 },
+          "created_at": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

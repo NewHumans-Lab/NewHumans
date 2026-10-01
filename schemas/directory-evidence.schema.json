@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/directory-evidence.schema.json",
+  "title": "M04 Directory ability evidence nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "evidence_id",
+    "world_id",
+    "entity_id",
+    "evidence_type",
+    "task_domain",
+    "task_difficulty",
+    "sample_size",
+    "outcome",
+    "rework_count",
+    "duration_ms",
+    "cost_micro_e",
+    "reproduction_status",
+    "interest_relationships",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "evidence_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "entity_id": { "type": "string", "format": "uuid" },
+    "evidence_type": {
+      "enum": [
+        "SELF_CLAIM",
+        "WORK_PRODUCT",
+        "CONTRACT_PERFORMANCE",
+        "AUTOMATED_TEST",
+        "COUNTERPARTY_REVIEW",
+        "INDEPENDENT_REVIEW"
+      ]
+    },
+    "task_domain": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "task_difficulty": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "input_ref": { "type": ["string", "null"], "maxLength": 2048 },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "description": { "type": ["string", "null"], "maxLength": 2000 },
+        "model_reference": { "type": ["string", "null"], "maxLength": 512 },
+        "tool_references": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "sample_size": { "type": "integer", "minimum": 1 },
+    "outcome": {
+      "type": "object",
+      "required": ["status", "summary"],
+      "properties": {
+        "status": { "enum": ["PASS", "FAIL", "PARTIAL", "NOT_APPLICABLE"] },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      },
+      "additionalProperties": false
+    },
+    "rework_count": { "type": "integer", "minimum": 0 },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "cost_micro_e": { "type": "string", "pattern": "^(0|[1-9]\\d*)$" },
+    "reproduction_status": {
+      "enum": ["NOT_APPLICABLE", "PENDING", "REPRODUCED", "PARTIAL", "FAILED"]
+    },
+    "interest_relationships": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+    },
+    "source_ref": { "type": ["string", "null"], "maxLength": 2048 },
+    "work_object_id": {
+      "anyOf": [
+        { "type": "string", "format": "uuid" },
+        { "type": "null" }
+      ]
+    },
+    "contract_id": {
+      "anyOf": [
+        { "type": "string", "format": "uuid" },
+        { "type": "null" }
+      ]
+    },
+    "reviewer_entity_id": {
+      "anyOf": [
+        { "type": "string", "format": "uuid" },
+        { "type": "null" }
+      ]
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
