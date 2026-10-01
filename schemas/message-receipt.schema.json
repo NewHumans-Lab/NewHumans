@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/message-receipt.schema.json",
+  "title": "M04 message receipt nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "message_id",
+    "thread_id",
+    "sender",
+    "recipient",
+    "status",
+    "version",
+    "causation_id",
+    "correlation_id",
+    "recorded_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "receipt_id": { "type": "string", "format": "uuid" },
+    "message_id": { "type": "string", "format": "uuid" },
+    "thread_id": { "type": "string", "format": "uuid" },
+    "sender": { "type": "string", "format": "uuid" },
+    "recipient": { "type": "string", "format": "uuid" },
+    "status": {
+      "enum": ["SENT", "DELIVERED", "OBSERVED", "REJECTED", "EXPIRED", "ACCEPTED"]
+    },
+    "version": { "type": "integer", "minimum": 1 },
+    "causation_id": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "correlation_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "accepted_target": {
+      "type": "object",
+      "required": ["kind", "id", "version"],
+      "properties": {
+        "kind": { "enum": ["OFFER", "INVITATION", "CONTRACT"] },
+        "id": { "type": "string", "format": "uuid" },
+        "version": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["status"],
+        "properties": { "status": { "const": "ACCEPTED" } }
+      },
+      "then": {
+        "required": ["accepted_target"],
+        "properties": { "accepted_target": {} }
+      },
+      "else": {
+        "properties": { "accepted_target": false }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

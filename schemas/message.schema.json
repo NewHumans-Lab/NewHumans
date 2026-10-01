@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/message.schema.json",
+  "title": "M04 message nh.v3.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "message_id",
+    "thread_id",
+    "sender",
+    "recipients",
+    "type",
+    "version",
+    "causation_id",
+    "correlation_id",
+    "created_at",
+    "content_ref",
+    "delivery_status",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": { "const": "nh.v3.0" },
+    "message_id": { "type": "string", "format": "uuid" },
+    "thread_id": { "type": "string", "format": "uuid" },
+    "sender": { "type": "string", "format": "uuid" },
+    "recipients": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "type": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "version": { "type": "integer", "minimum": 1 },
+    "reply_to": { "type": ["string", "null"], "format": "uuid" },
+    "causation_id": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "correlation_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": ["string", "null"], "format": "date-time" },
+    "content_ref": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "related_goal_id": { "type": ["string", "null"], "format": "uuid" },
+    "related_contract_id": { "type": ["string", "null"], "format": "uuid" },
+    "delivery_status": {
+      "enum": ["SENT", "DELIVERED", "OBSERVED", "REJECTED", "EXPIRED"]
+    },
+    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 200 }
+  },
+  "additionalProperties": false
+}
