@@ -1,0 +1,6 @@
+{
+  "DATABASE_URL": "postgresql://newhumans:example@db.example.test:5432/newhumans",
+  "NODE_ENV": "production",
+  "KB_PROVIDER": "knowledge-ball",
+  "KB_ENDPOINT": "https://knowledge.example.test"
+}
