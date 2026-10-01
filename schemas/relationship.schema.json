@@ -1,0 +1,304 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://newhumans.world/schemas/relationship.schema.json",
+  "title": "M04 relationship nh.v3.0",
+  "type": "object",
+  "required": [
+    "relationship_id",
+    "world_id",
+    "subject_entity_id",
+    "object_entity_id",
+    "relationship_type",
+    "state",
+    "time",
+    "provenance"
+  ],
+  "properties": {
+    "relationship_id": { "type": "string", "format": "uuid" },
+    "world_id": { "type": "string", "minLength": 1 },
+    "subject_entity_id": { "type": "string", "format": "uuid" },
+    "object_entity_id": { "type": "string", "format": "uuid" },
+    "relationship_type": {
+      "enum": [
+        "considers_friend",
+        "mutual_friendship",
+        "worked_with",
+        "completed_contract_with",
+        "employed_by",
+        "member_of",
+        "manages",
+        "created_by",
+        "parent_of"
+      ]
+    },
+    "state": {
+      "type": "object",
+      "required": ["status", "dispute_status", "changed_at"],
+      "properties": {
+        "status": { "enum": ["ACTIVE", "ENDED"] },
+        "dispute_status": { "enum": ["NONE", "OPEN", "RESOLVED"] },
+        "changed_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "time": {
+      "type": "object",
+      "required": ["created_at", "valid_from", "valid_until"],
+      "properties": {
+        "created_at": { "type": "string", "format": "date-time" },
+        "valid_from": { "type": "string", "format": "date-time" },
+        "valid_until": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance": { "type": "object" }
+  },
+  "$defs": {
+    "provenanceRecord": {
+      "type": "object",
+      "required": ["record_type", "record_id", "occurred_at"],
+      "properties": {
+        "record_type": {
+          "enum": [
+            "DECLARATION",
+            "CONFIRMATION",
+            "CONTRACT",
+            "MEMBERSHIP",
+            "ROLE_ASSIGNMENT",
+            "BIRTH_PROTOCOL"
+          ]
+        },
+        "record_id": { "type": "string", "minLength": 1 },
+        "participant_role": { "enum": ["SUBJECT", "OBJECT"] },
+        "record_version": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "integer", "minimum": 1 }
+          ]
+        },
+        "occurred_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "declarationProvenance": {
+      "type": "object",
+      "required": ["source_kind", "records"],
+      "properties": {
+        "source_kind": { "const": "ENTITY_DECLARATION" },
+        "records": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/provenanceRecord" },
+              {
+                "type": "object",
+                "required": ["record_type", "participant_role"],
+                "properties": {
+                  "record_type": { "const": "DECLARATION" },
+                  "participant_role": { "const": "SUBJECT" }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "mutualProvenance": {
+      "type": "object",
+      "required": ["source_kind", "records"],
+      "properties": {
+        "source_kind": { "const": "MUTUAL_CONFIRMATION" },
+        "records": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/provenanceRecord" },
+              {
+                "type": "object",
+                "required": ["record_type", "participant_role"],
+                "properties": {
+                  "record_type": { "const": "CONFIRMATION" }
+                }
+              }
+            ]
+          },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": ["participant_role"],
+                "properties": { "participant_role": { "const": "SUBJECT" } }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["participant_role"],
+                "properties": { "participant_role": { "const": "OBJECT" } }
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "contractProvenance": {
+      "type": "object",
+      "required": ["source_kind", "records"],
+      "properties": {
+        "source_kind": { "const": "CONTRACT" },
+        "records": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/provenanceRecord" },
+          "contains": {
+            "type": "object",
+            "required": ["record_type"],
+            "properties": { "record_type": { "const": "CONTRACT" } }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "membershipProvenance": {
+      "type": "object",
+      "required": ["source_kind", "records"],
+      "properties": {
+        "source_kind": { "const": "MEMBERSHIP" },
+        "records": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/provenanceRecord" },
+          "contains": {
+            "type": "object",
+            "required": ["record_type"],
+            "properties": { "record_type": { "const": "MEMBERSHIP" } }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "roleProvenance": {
+      "type": "object",
+      "required": ["source_kind", "records"],
+      "properties": {
+        "source_kind": { "const": "ROLE_ASSIGNMENT" },
+        "records": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/provenanceRecord" },
+          "contains": {
+            "type": "object",
+            "required": ["record_type"],
+            "properties": { "record_type": { "const": "ROLE_ASSIGNMENT" } }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "birthProvenance": {
+      "type": "object",
+      "required": ["source_kind", "records"],
+      "properties": {
+        "source_kind": { "const": "BIRTH_PROTOCOL" },
+        "records": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/provenanceRecord" },
+          "contains": {
+            "type": "object",
+            "required": ["record_type"],
+            "properties": { "record_type": { "const": "BIRTH_PROTOCOL" } }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "relationship_type": { "const": "considers_friend" },
+        "provenance": { "$ref": "#/$defs/declarationProvenance" }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "relationship_type": { "const": "mutual_friendship" },
+        "provenance": { "$ref": "#/$defs/mutualProvenance" }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "relationship_type": { "enum": ["worked_with", "completed_contract_with", "employed_by"] },
+        "provenance": { "$ref": "#/$defs/contractProvenance" }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "relationship_type": { "const": "member_of" },
+        "provenance": { "$ref": "#/$defs/membershipProvenance" }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "relationship_type": { "const": "manages" },
+        "provenance": { "$ref": "#/$defs/roleProvenance" }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "relationship_type": { "enum": ["created_by", "parent_of"] },
+        "provenance": { "$ref": "#/$defs/birthProvenance" }
+      }
+    }
+  ],
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "object",
+            "properties": { "status": { "const": "ENDED" } },
+            "required": ["status"]
+          }
+        },
+        "required": ["state"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "object",
+            "properties": {
+              "valid_until": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}
