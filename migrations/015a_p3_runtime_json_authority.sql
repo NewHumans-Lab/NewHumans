@@ -100,7 +100,7 @@ DECLARE
   ref jsonb;
   g record;
   version_text text;
-  goal_text text;
+  checkpoint_goal_ref_text text;
 BEGIN
   IF jsonb_typeof(COALESCE(NEW.pending_actions,'[]'::jsonb)) <> 'array' THEN
     RAISE EXCEPTION 'checkpoint pending_actions must be an array' USING ERRCODE='23514';
@@ -122,10 +122,10 @@ BEGIN
          OR ref->'version' = 'null'::jsonb THEN
         RAISE EXCEPTION 'checkpoint goal reference requires non-null goal_id and version' USING ERRCODE='23514';
       END IF;
-      goal_text := ref->>'goal_id';
+      checkpoint_goal_ref_text := ref->>'goal_id';
       version_text := ref->>'version';
-      IF goal_text IS NULL
-         OR goal_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      IF checkpoint_goal_ref_text IS NULL
+         OR checkpoint_goal_ref_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
          OR version_text IS NULL
          OR version_text !~ '^[1-9][0-9]*$' THEN
         RAISE EXCEPTION 'checkpoint goal reference has invalid goal_id or version' USING ERRCODE='23514';
@@ -133,7 +133,7 @@ BEGIN
       SELECT goal_id,version INTO g
         FROM runtime.goals
        WHERE world_id=NEW.world_id AND subject_id=NEW.activity_subject_id
-         AND goal_id=goal_text::uuid;
+         AND goal_id=checkpoint_goal_ref_text::uuid;
       IF g.goal_id IS NULL OR g.version <> version_text::bigint THEN
         RAISE EXCEPTION 'checkpoint goal reference is not the current authoritative version' USING ERRCODE='23514';
       END IF;
