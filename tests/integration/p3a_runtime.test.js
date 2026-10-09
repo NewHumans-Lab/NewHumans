@@ -139,6 +139,9 @@ test('model switching appends immutable manifest/route history and moves one cur
     /append-only/,
   );
 
+  const afterFirstRoute = await withTransaction(pool, (client) => inspectAgentRuntime(client, {
+    worldId: world, agentEntityId: agent.entity_id, actorEntityId: system.entity_id,
+  }));
   const second = await gatewayManifest(agent, 'two');
   const route2 = await withTransaction(pool, (client) => publishModelRoute(client, {
     worldId: world,
@@ -146,6 +149,7 @@ test('model switching appends immutable manifest/route history and moves one cur
     manifestId: second.manifest.manifest_id,
     routePolicy: { purposes: ['PRIMARY_INFERENCE', 'AUXILIARY_INFERENCE'] },
     maxTurnBudgetMicroE: '600000',
+    expectedProfileVersion: afterFirstRoute.profile.profile_version,
     reason: 'verified route change',
     actorEntityId: system.entity_id,
   }));

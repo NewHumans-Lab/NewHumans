@@ -27,6 +27,14 @@ function object(value, field) {
   return value;
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function microE(value, field, { nullable = true } = {}) {
   if ((value === undefined || value === null) && nullable) return null;
   const s = String(value);
@@ -165,9 +173,11 @@ export async function getExecutionEligibility(client, { worldId, agentEntityId, 
   const routeIsAvailable = await routeAvailable(client, worldId, agentEntityId, p.current_route_id);
   const available = BigInt(wallet.available_micro_e);
   const flags = flagSet(state);
+  const executionReady = ['IDLE','RUNNABLE'].includes(state.execution_status);
   const reasons = [];
   if (entity?.identity_status !== 'ACTIVE') reasons.push('IDENTITY_NOT_ACTIVE');
   if (state.life_status !== 'ACTIVE') reasons.push(`LIFE_${state.life_status}`);
+  if (!executionReady) reasons.push(`EXECUTION_${state.execution_status}`);
   if (!feePaid) reasons.push('DAILY_FEE_REQUIRED');
   if (available <= 0n) reasons.push('NO_AVAILABLE_ENERGY');
   if (state.model_status !== 'AVAILABLE' || !routeIsAvailable || flags.has('NO_MODEL_ROUTE')) reasons.push('MODEL_ROUTE_UNAVAILABLE');
@@ -176,6 +186,7 @@ export async function getExecutionEligibility(client, { worldId, agentEntityId, 
 
   const baseRuntimeReady = entity?.identity_status === 'ACTIVE'
     && state.life_status === 'ACTIVE'
+    && executionReady
     && feePaid
     && available > 0n
     && state.model_status === 'AVAILABLE'
@@ -212,6 +223,13 @@ export async function activateRuntime(client, {
   date = billingDate(date);
   reason = text(reason, 'reason');
   const p = await profile(client, worldId, agentEntityId, true);
+  const subject = (await client.query(
+    `SELECT identity_status FROM core.entities WHERE world_id=$1 AND entity_id=$2 FOR UPDATE`,
+    [worldId, agentEntityId],
+  )).rows[0];
+  if (subject?.identity_status !== 'ACTIVE') {
+    throw problem('IDENTITY_NOT_ACTIVE', 'runtime activation requires an ACTIVE M01 Agent identity', 409);
+  }
   const state = await lifecycle(client, worldId, agentEntityId, true);
   if (state.life_status === 'ACTIVE') return { lifecycle: state, replayed: true };
   if (!['REGISTERED', 'DORMANT'].includes(state.life_status)) throw problem('INVALID_LIFECYCLE_TRANSITION', `${state.life_status} cannot activate`, 409);
@@ -332,18 +350,19 @@ export async function setModelStatus(client, { worldId, agentEntityId, modelStat
   const state = await lifecycle(client, worldId, agentEntityId, true);
   if (state.model_status === modelStatus) return { lifecycle: state, replayed: true };
   if (modelStatus !== 'AVAILABLE' && state.life_status === 'ACTIVE') await assertQuiescent(client, worldId, agentEntityId, state);
-  const nextLife = modelStatus !== 'AVAILABLE' && state.life_status === 'ACTIVE' ? 'DORMANT' : state.life_status;
+  const modelCausesDormancy = modelStatus !== 'AVAILABLE' && state.life_status === 'ACTIVE';
+  const nextLife = modelCausesDormancy ? 'DORMANT' : state.life_status;
   const nextExecution = modelStatus !== 'AVAILABLE' ? 'BLOCKED' : state.execution_status;
+  const nextDormantReason = modelCausesDormancy ? 'MODEL_UNAVAILABLE' : state.dormant_reason;
   const updated = (await client.query(
     `UPDATE runtime.lifecycle_states
-        SET model_status=$3,life_status=$4,execution_status=$5,
-            dormant_reason=CASE WHEN $4='DORMANT' THEN 'MODEL_UNAVAILABLE' ELSE dormant_reason END,
+        SET model_status=$3,life_status=$4,execution_status=$5,dormant_reason=$6,
             state_version=state_version+1,
             last_transition_at=CASE WHEN life_status IS DISTINCT FROM $4 THEN now() ELSE last_transition_at END,
             updated_at=now()
       WHERE world_id=$1 AND activity_subject_id=$2
       RETURNING life_status,execution_status,model_status,restriction_flags,archive_status,state_version,dormant_reason,last_transition_at,updated_at`,
-    [worldId, agentEntityId, modelStatus, nextLife, nextExecution],
+    [worldId, agentEntityId, modelStatus, nextLife, nextExecution, nextDormantReason],
   )).rows[0];
   if (state.life_status !== nextLife) await recordTransition(client, {
     worldId, subjectId: agentEntityId, fromStatus: state.life_status, toStatus: nextLife, reason,
@@ -489,7 +508,9 @@ export async function scheduleAction(client, {
     const same = existing.action_kind === actionKind
       && new Date(existing.due_at).toISOString() === due
       && existing.timezone === timezone
+      && canonicalJson(existing.filter_json) === canonicalJson(filter)
       && existing.missed_policy === missedPolicy
+      && (existing.latest_run_at === null ? null : new Date(existing.latest_run_at).toISOString()) === latest
       && String(existing.budget_micro_e ?? '') === String(budget ?? '')
       && existing.priority === priority;
     if (!same) throw problem('IDEMPOTENCY_CONFLICT', 'scheduled action dedupe key reused with different terms', 409);
@@ -515,11 +536,12 @@ async function assertLease(client, worldId, subjectId, workerId, leaseEpoch) {
   workerId = text(workerId, 'workerId', 200);
   const epoch = positiveVersion(leaseEpoch, 'leaseEpoch');
   const lease = (await client.query(
-    `SELECT worker_id,lease_epoch,expires_at,released_at FROM runtime.runtime_leases
+    `SELECT worker_id,lease_epoch,(released_at IS NULL AND expires_at > now()) active
+       FROM runtime.runtime_leases
       WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
     [worldId, subjectId],
   )).rows[0];
-  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || lease.released_at || new Date(lease.expires_at) <= new Date()) {
+  if (!lease || lease.worker_id !== workerId || String(lease.lease_epoch) !== epoch || !lease.active) {
     throw problem('STALE_RUNTIME_LEASE', 'worker does not hold the current active runtime lease', 409);
   }
   return { workerId, epoch };
@@ -548,7 +570,6 @@ export async function claimScheduledAction(client, {
   }
   const state = await lifecycle(client, worldId, row.subject_id, true);
   if (row.action_kind === 'AUTONOMOUS_TURN') {
-    if (state.life_status !== 'ACTIVE') throw problem('RUNTIME_NOT_ACTIVE', 'autonomous turn schedule requires ACTIVE runtime', 409);
     if ((state.restriction_flags ?? []).includes('M03_CONTEXT_UNAVAILABLE')) {
       const blocked = (await client.query(
         `UPDATE runtime.scheduled_actions SET status='BLOCKED',blocked_reason='M03_CONTEXT_UNAVAILABLE',updated_at=now()
@@ -557,6 +578,15 @@ export async function claimScheduledAction(client, {
       )).rows[0];
       await bumpState(client, worldId, row.subject_id);
       return { ...blocked, claim_result: 'BLOCKED_DEPENDENCY' };
+    }
+    const eligibility = await getExecutionEligibility(client, {
+      worldId,
+      agentEntityId: row.subject_id,
+      billingDate: nowIso.slice(0, 10),
+      actorEntityId,
+    });
+    if (!eligibility.can_autonomous_turn) {
+      throw problem('RUNTIME_INELIGIBLE', `autonomous turn is not currently eligible: ${eligibility.reasons.join(',')}`, 409);
     }
   }
   const claimed = (await client.query(
