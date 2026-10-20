@@ -2,6 +2,8 @@
 
 Status: implementation candidate; merge only after required CI gates pass.
 
+Validation status is tracked by the pull request's current GitHub Actions run.
+
 ## Change
 
 Before preparing a `CONTRACT_SETTLEMENT` Saga or writing its financial Outbox command, the service now requires durable decision evidence bound to the current contract version:
