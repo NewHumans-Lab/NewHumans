@@ -218,7 +218,7 @@ test('DORMANT receives inbound without cognition, same-day resume does not doubl
   await withTransaction(pool, (client) => resumeRuntime(client, {
     worldId: world, agentEntityId: agent.entity_id, billingDate: '2026-09-16', actorEntityId: system.entity_id,
   }));
-  assert.equal(await feeCount(agent, '2026-09-16'), 1);
+  assert.equal(await feeCount(agent), 1); // WAKE billing date is database-authoritative, not caller-supplied
   await withTransaction(pool, (client) => pauseRuntime(client, {
     worldId: world, agentEntityId: agent.entity_id, reason: 'overnight sleep', actorEntityId: agent.entity_id,
   }));
