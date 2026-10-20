@@ -54,7 +54,7 @@ function validateEscrowSnapshot(snapshot, expectedEscrowRef) {
   if (!/^(0|[1-9]\d*)$/.test(snapshot.balanceMicroE) || BigInt(snapshot.balanceMicroE) <= 0n) {
     throw problem('ESCROW_BALANCE_NOT_DISTRIBUTABLE', 'authoritative escrow balance must be a positive integer microE string');
   }
-  if (!/^(0|[1-9]\\d*)$/.test(snapshot.authorityVersion)) {
+  if (!/^(0|[1-9]\d*)$/.test(snapshot.authorityVersion)) {
     throw problem('INVALID_ESCROW_SNAPSHOT', 'authoritative escrow resource version must be a non-negative integer string', 400);
   }
   if (!Number.isFinite(Date.parse(snapshot.observedAt))) {
