@@ -6,7 +6,7 @@ Status: authoritative NewHumans-side boundary contract for KB Economy integratio
 
 NewHumans consumes Energy through one injected `EconomyPort`. Knowledge Ball Economy remains the authority for balances, eligibility, activity-day charging, quotes, reservations, settlement, transfers, escrow and ledger history. NewHumans does not read or write Knowledge Ball tables and does not maintain a shadow wallet or local-ledger fallback.
 
-Contract version: `nh.kb-economy-port.v1`.
+Contract version: `nh.kb-economy-port.v2`. Version 2 adds an authoritative escrow-balance snapshot and compare-and-distribute precondition; a v1 adapter is not production-compatible with this contract.
 
 The port exposes exactly ten operations:
 
@@ -35,7 +35,19 @@ All Energy amounts are decimal integer strings in **microE**. JSON floating-poin
 | `escrow` | `escrow_action`, `contract_ref`, `amount_micro_e` | escrow reference/action/amount |
 | `ledger` | optional `cursor`, `limit` | ordered entries, cursor and authoritative balance context |
 
-`escrow_action` is `FUND`, `DISTRIBUTE`, or `REFUND`. `eligibility.purpose` is `ACTIVITY`, `TASK_SEEK`, `INBOUND_OFFER`, or `CONTRACT_EXECUTION`.
+`escrow_action` is `BALANCE`, `FUND`, `DISTRIBUTE`, or `REFUND`. `BALANCE` is a read-only authoritative snapshot and must not include an amount. `DISTRIBUTE` must set `amount_micro_e = expected_balance_micro_e = sum(allocations.amount_micro_e)` and carry the snapshot's `expected_resource_version` plus `balance_receipt_ref`. `eligibility.purpose` is `ACTIVITY`, `TASK_SEEK`, `INBOUND_OFFER`, or `CONTRACT_EXECUTION`.
+
+## Authoritative escrow settlement invariant (v2)
+
+A NewHumans contract price is a negotiated term, not proof of the amount still held in escrow. Prepayment, partial disbursement, refunds, or other permitted escrow movements can make the current escrow balance differ from the original price.
+
+1. The NewHumans orchestration layer calls the escrow operation with escrow_action=BALANCE and the opaque escrow_ref. The Knowledge Ball authority returns balance_micro_e, resource_version, receipt_ref, and observed_at.
+2. NewHumans freezes an allocation snapshot whose total exactly equals that observed balance. The snapshot and its receipt/version are persisted in the Saga/Outbox.
+3. The DISTRIBUTE command carries the frozen expected balance, expected resource version, balance receipt reference, and allocations. Knowledge Ball must compare both expected balance and resource version with its current authoritative escrow inside the same local transaction that distributes funds.
+4. If either value no longer matches, Knowledge Ball returns STALE_VERSION with its current version and performs no distribution. NewHumans must reread and re-evaluate the allocation decision; it must not silently change the old command payload or reuse the old idempotency key with a different digest.
+5. On success, Knowledge Ball returns a settlement receipt, distributed amount, remaining balance, and new resource version. The settlement receipt is the result evidence for the Saga; the escrow reference alone is not proof of settlement.
+
+A balance snapshot is not a reservation. The atomic expected-balance/version check at distribution is mandatory to close the read/settle race.
 
 ## Idempotency, timeout and unknown outcome
 
