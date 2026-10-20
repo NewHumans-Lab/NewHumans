@@ -298,7 +298,7 @@ export async function pauseRuntime(client, {
   return { lifecycle: updated, replayed: false };
 }
 
-export async function reconcileActiveRuntime(client, { worldId, agentEntityId, billingDate: date, actorEntityId, actionId }) {
+export async function reconcileActiveRuntime(client, { worldId, agentEntityId, billingDate: date, actorEntityId, actionId, claimantLease = null }) {
   const actor = await actorForSubject(client, worldId, agentEntityId, actorEntityId, { systemOnly: true });
   date = billingDate(date);
   const state = await lifecycle(client, worldId, agentEntityId, true);
@@ -323,7 +323,23 @@ export async function reconcileActiveRuntime(client, { worldId, agentEntityId, b
     }
   }
   if (!reasonCode) return { lifecycle: await lifecycle(client, worldId, agentEntityId), fee, changed: false };
-  await assertQuiescent(client, worldId, agentEntityId, state);
+  if (state.execution_status === 'RUNNING') {
+    throw problem('RUNTIME_NOT_QUIESCENT', 'runtime is RUNNING', 409);
+  }
+  if (claimantLease) {
+    const lease = (await client.query(
+      \`SELECT worker_id,lease_epoch,(released_at IS NULL AND expires_at > now()) active
+         FROM runtime.runtime_leases
+        WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE\`,
+      [worldId, agentEntityId],
+    )).rows[0];
+    if (!lease || !lease.active || lease.worker_id !== claimantLease.workerId
+        || String(lease.lease_epoch) !== String(claimantLease.leaseEpoch)) {
+      throw problem('STALE_RUNTIME_LEASE', 'unfunded reconciliation requires the claimant’s current active lease', 409);
+    }
+  } else {
+    await assertQuiescent(client, worldId, agentEntityId, state);
+  }
   const flags = flagSet(state); flags.add(reasonCode);
   const updated = (await client.query(
     `UPDATE runtime.lifecycle_states
@@ -338,7 +354,7 @@ export async function reconcileActiveRuntime(client, { worldId, agentEntityId, b
     reason: `runtime reconciled to dormancy: ${reasonCode}`, billingDateValue: date,
     stateVersion: updated.state_version, actorEntityId: actor.entity_id, actionId,
   });
-  return { lifecycle: updated, fee, changed: true };
+  return { lifecycle: updated, fee, changed: true, reason: reasonCode };
 }
 
 export async function setModelStatus(client, { worldId, agentEntityId, modelStatus, reason, actorEntityId, actionId }) {
