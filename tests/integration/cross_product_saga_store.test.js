@@ -6,6 +6,7 @@ import {
   claimSagaOutbox,
   markPersistedSagaLocalTransitionCommitted,
   prepareSagaIntent,
+  recordSagaDispatchFailure,
   recordSagaFinancialResult,
 } from '../../src/services/cross_product_saga_store.js';
 import { buildFinancialCommand, createContractActivationSaga, SagaState } from '../../src/shared/cross_product_saga.js';
@@ -77,6 +78,24 @@ test('outbox claims are leased and duplicate authoritative results are idempoten
   assert.equal((await pool.query('SELECT status FROM social.cross_product_outbox WHERE outbox_id=$1', [claimed.outbox_id])).rows[0].status, 'DELIVERED');
 });
 
+
+test('authoritative result resolves a previously unknown outcome without rotating the funds key', async () => {
+  const saga = activationSaga();
+  await prepare(saga);
+  const claimed = await claimSagaOutbox(pool, { workerId: 'worker-unknown', leaseMs: 10_000 });
+  const command = buildFinancialCommand(saga);
+  await withTransaction(pool, (client) => recordSagaDispatchFailure(client, {
+    outboxId: claimed.outbox_id, leaseOwner: 'worker-unknown', errorCode: 'TRANSPORT_TIMEOUT', outcomeUnknown: true,
+  }));
+  assert.equal((await pool.query('SELECT state FROM social.cross_product_sagas WHERE saga_id=$1', [saga.saga_id])).rows[0].state, SagaState.RECONCILIATION_REQUIRED);
+  const result = successfulResult(saga, 'escrow-reconciled');
+  const observed = await withTransaction(pool, (client) => recordSagaFinancialResult(client, {
+    worldId: saga.world_id, operationKey: command.operation_key, result, sourceEventId: 'reconciliation-query-1',
+  }));
+  assert.equal(observed.conflict, false);
+  assert.equal(observed.saga.state, SagaState.REMOTE_SUCCEEDED);
+  assert.equal((await pool.query('SELECT operation_key,status FROM social.cross_product_outbox WHERE saga_id=$1', [saga.saga_id])).rows[0].operation_key, command.operation_key);
+});
 test('conflicting callback for one operation freezes automated Saga progress for reconciliation', async () => {
   const saga = activationSaga();
   await prepare(saga);
