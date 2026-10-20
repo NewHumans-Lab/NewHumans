@@ -8,6 +8,7 @@ export const MIGRATION_NAMESPACES = Object.freeze([
 
 // The pre-namespace history is immutable. PR #17 was already open when the namespace
 // policy was introduced, so its existing migration files are grandfathered explicitly.
+// Keep the exact PR #17 filenames synchronized with NH-049; never relax the pattern.
 // Anything else below 0300 is rejected instead of extending the old global counter.
 export const LEGACY_MIGRATION_ALLOWLIST = Object.freeze([
   '001_p0_p1_foundation.sql',
@@ -24,9 +25,13 @@ export const LEGACY_MIGRATION_ALLOWLIST = Object.freeze([
   '012_p3b_runtime_control_authority.sql',
   '013_p3b_active_state_guard.sql',
   '013a_p3_runtime_pre_hardening_cleanup.sql',
+  '013b_p3_runtime_json_preflight.sql',
   '014_p3_runtime_review_hardening.sql',
   '015a_p3_runtime_json_authority.sql',
   '015b_p3_runtime_lifecycle_authority.sql',
+  '015c_p3_runtime_final_review_closure.sql',
+  '015d_p3_connector_rotation_constraint_cleanup.sql',
+  '015e_p3_runtime_schedule_authority.sql',
 ]);
 
 // This migration landed on main during NH-014's concurrent integration window before
