@@ -407,7 +407,9 @@ test('scheduled WAKE has one atomic path and M03 blocks before fee; adopted cont
   }));
   assert.equal(woke.result, 'COMPLETED');
   assert.equal(woke.lifecycle.life_status, 'ACTIVE');
-  assert.equal(await feeCount(agent, '2026-09-16'), 1);
+  // Scheduler billing dates come from the database clock, not caller-supplied test arguments.
+  const authoritativeBillingDate = (await pool.query(`SELECT CURRENT_DATE::text AS date`)).rows[0].date;
+  assert.equal(await feeCount(agent, authoritativeBillingDate), 1);
   await assert.rejects(
     () => pool.query(`UPDATE runtime.scheduled_actions SET status='CLAIMED',claimed_by_worker='x',claimed_lease_epoch=1,claimed_at=now() WHERE world_id=$1 AND scheduled_action_id=$2`, [world, runnable.scheduled_action_id]),
     /scheduled action|WAKE|status/i,
