@@ -30,7 +30,7 @@ BEGIN
       END LOOP;
     WHEN 'string' THEN
       scalar := node #>> '{}';
-      IF scalar ~* '^\s*bearer\s+\S+\s*
+      IF scalar ~* '^\s*bearer\s+\S+\s*$' THEN
         RETURN true;
       END IF;
       IF scalar ~* '^\s*basic\s+[A-Za-z0-9+/]+={0,2}\s*$' THEN
