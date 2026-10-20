@@ -6,7 +6,7 @@ Scope: NewHumans contract state coordinated with Knowledge Ball authoritative Ec
 
 NH-002 establishes Knowledge Ball as the only writable Economy authority and NewHumans as the contract/relationship authority. Therefore contract activation, escrow and settlement cross an authority and database boundary. NewHumans and Knowledge Ball **do not share an ACID transaction**. Each product uses local ACID; cross-product correctness comes from durable Saga state, a transactional NH Outbox, KB-side durable idempotency, callback/inbox dedupe and reconciliation.
 
-NH-011 is the workflow-level contract. NH-005 (`nh.kb-economy-port.v1`) is the authoritative NewHumans-side Economy boundary used to submit escrow operations, while NH-009 (`nh.kb-idempotency.v1`) is the normative lower-level cross-product idempotency/retry contract behind those logical writes. NH-011 defines ordering, durable intermediate states, compensation and forward recovery; it does not redefine or weaken either lower-level contract.
+NH-011 is the workflow-level contract. NH-005 (`nh.kb-economy-port.v2`) is the authoritative NewHumans-side Economy boundary used to submit escrow operations, while NH-009 (`nh.kb-idempotency.v1`) is the normative lower-level cross-product idempotency/retry contract behind those logical writes. NH-011 defines ordering, durable intermediate states, compensation and forward recovery; it does not redefine or weaken either lower-level contract.
 
 This protocol supersedes earlier wording in `docs/NewHumans_System_Spec_V3.md`, M04 section 7 and M08 section 8 wherever those texts assume that NewHumans contract rows and the authoritative Energy ledger can commit or roll back in one database transaction. Historical wording is not evidence of a current cross-database transaction.
 
@@ -42,7 +42,7 @@ If a duplicate coordinator row were nevertheless produced with a different `saga
 
 A definite no-effect failure may later be retried only after current state is revalidated and a **new business attempt** is explicitly created. An unknown outcome never authorizes a new business attempt.
 
-### Layer B — NH-005 EconomyPort + NH-009 cross-product funds identity
+### Layer B — NH-005 EconomyPort v2 + NH-009 cross-product funds identity
 
 Every Saga financial step derives one stable `idempotency_key` from:
 
@@ -101,7 +101,7 @@ The durable Saga command is a **logical financial intent**, not one HTTP attempt
 The minimum materialized NH-005 request is:
 
 ```text
-contract_version = nh.kb-economy-port.v1
+contract_version = nh.kb-economy-port.v2
 operation        = escrow
 request_id        = fresh per transport attempt
 idempotency_key   = stable Saga funds key

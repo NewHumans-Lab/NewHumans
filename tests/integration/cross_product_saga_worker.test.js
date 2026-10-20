@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createPool, withTransaction } from '../../src/db.js';
 import { prepareSagaIntent } from '../../src/services/cross_product_saga_store.js';
 import { dispatchSagaOutboxOnce, reconcileSagaOnce } from '../../src/services/cross_product_saga_worker.js';
-import { createContractActivationSaga, buildFinancialCommand, SagaState } from '../../src/shared/cross_product_saga.js';
+import { createContractActivationSaga, createContractSettlementSaga, buildFinancialCommand, SagaState } from '../../src/shared/cross_product_saga.js';
 import { ECONOMY_PORT_VERSION } from '../../src/ports/economy_port.js';
 
 const pool = createPool();
@@ -86,6 +86,57 @@ test('retryable EconomyPort timeout reuses the logical funds key but issues a ne
   assert.equal(requests[0].idempotency_key, requests[1].idempotency_key);
   assert.equal(requests[0].idempotency_key, fx.command.operation_key);
   assert.notEqual(requests[0].request_id, requests[1].request_id);
+});
+
+test('settlement dispatch persists the settlement receipt rather than treating escrow reference as settlement evidence', async () => {
+  const worldId = worldPrefix + crypto.randomUUID();
+  const saga = createContractSettlementSaga({
+    sagaId: crypto.randomUUID(),
+    businessAttemptId: crypto.randomUUID(),
+    worldId,
+    contractId: crypto.randomUUID(),
+    contractVersion: 1,
+    settlementRequest: {
+      principal_ref: 'principal:employer',
+      payload: {
+        contract_ref: 'contract:' + worldId,
+        escrow_ref: 'kb-escrow:1',
+        amount_micro_e: '15000000',
+        expected_balance_micro_e: '15000000',
+        expected_resource_version: '12',
+        balance_receipt_ref: 'kb-balance-receipt:1',
+        balance_observed_at: '2026-10-20T08:00:00Z',
+        allocations: [{ principal_ref: 'principal:contractor', amount_micro_e: '15000000' }],
+      },
+    },
+  });
+  const prepared = await withTransaction(pool, client => prepareSagaIntent(client, saga));
+  const result = await dispatchSagaOutboxOnce(pool, {
+    workerId: 'worker-settlement-receipt',
+    worldId,
+    economyPort: { escrow: async request => ({
+      contract_version: ECONOMY_PORT_VERSION,
+      operation: 'escrow',
+      request_id: request.request_id,
+      status: 'SUCCEEDED',
+      operation_ref: 'op:escrow:1',
+      resource_version: '13',
+      result: {
+        escrow_action: 'DISTRIBUTE',
+        escrow_ref: 'kb-escrow:1',
+        settlement_ref: 'kb-settlement:1',
+        receipt_ref: 'kb-settlement-receipt:1',
+        distributed_micro_e: '15000000',
+        escrow_balance_after_micro_e: '0',
+      },
+      error: null,
+    }) },
+  });
+  assert.equal(result.outcome, 'DELIVERED');
+  assert.equal((await pool.query(
+    "SELECT result_snapshot->>'result_ref' AS result_ref FROM social.cross_product_inbox WHERE world_id=$1 AND operation_key=$2",
+    [worldId, prepared.outbox.operation_key],
+  )).rows[0].result_ref, 'kb-settlement:1');
 });
 
 test('ambiguous transport failure blocks resend until authoritative lookup proves absence', async () => {

@@ -1,6 +1,6 @@
 import { KB_ERROR_CODES, KB_ERROR_MODEL } from '../shared/kb_errors.js';
 
-const CONTRACT_VERSION = 'nh.kb-economy-port.v1';
+const CONTRACT_VERSION = 'nh.kb-economy-port.v2';
 
 export const ECONOMY_PORT_VERSION = CONTRACT_VERSION;
 
@@ -35,7 +35,7 @@ export const ECONOMY_PORT_SCENARIOS = Object.freeze([
 const OPERATION_SET = new Set(ECONOMY_PORT_OPERATIONS);
 const STATUS_SET = new Set(ECONOMY_PORT_STATUSES);
 const PURPOSES = new Set(['ACTIVITY', 'TASK_SEEK', 'INBOUND_OFFER', 'CONTRACT_EXECUTION']);
-const ESCROW_ACTIONS = new Set(['FUND', 'DISTRIBUTE', 'REFUND']);
+const ESCROW_ACTIONS = new Set(['FUND', 'DISTRIBUTE', 'REFUND', 'BALANCE']);
 const DECIMAL_INTEGER = /^-?(0|[1-9]\d*)$/;
 const NON_NEGATIVE_INTEGER = /^(0|[1-9]\d*)$/;
 const POSITIVE_INTEGER = /^[1-9]\d*$/;
@@ -144,9 +144,43 @@ function assertRequestPayload(operation, payload) {
         throw contractError('INVALID_ECONOMY_PORT_REQUEST', 'payload.escrow_action is not supported', { operation, field: 'payload.escrow_action' });
       }
       assertNonEmptyString(payload.contract_ref, 'payload.contract_ref');
+      if (payload.escrow_action === 'BALANCE') {
+        assertNonEmptyString(payload.escrow_ref, 'payload.escrow_ref');
+        if (payload.amount_micro_e !== undefined) {
+          throw contractError('INVALID_ECONOMY_PORT_REQUEST', 'BALANCE must not carry amount_micro_e', { operation });
+        }
+        break;
+      }
       assertPositiveMicroE(payload, 'amount_micro_e');
       if (payload.amount_micro_e === undefined) {
         throw contractError('INVALID_ECONOMY_PORT_REQUEST', 'payload.amount_micro_e is required', { operation });
+      }
+      if (payload.escrow_action === 'DISTRIBUTE') {
+        assertNonEmptyString(payload.escrow_ref, 'payload.escrow_ref');
+        assertNonEmptyString(payload.balance_receipt_ref, 'payload.balance_receipt_ref');
+        assertNonEmptyString(payload.balance_observed_at, 'payload.balance_observed_at');
+        if (!Number.isFinite(Date.parse(payload.balance_observed_at))) {
+          throw contractError('INVALID_ECONOMY_PORT_REQUEST', 'payload.balance_observed_at must be a timestamp', { operation });
+        }
+        assertMicroEString(payload.expected_balance_micro_e, { field: 'payload.expected_balance_micro_e', allowZero: false });
+        assertVersion(payload.expected_resource_version, 'payload.expected_resource_version');
+        if (payload.expected_resource_version === undefined) {
+          throw contractError('INVALID_ECONOMY_PORT_REQUEST', 'DISTRIBUTE requires expected_resource_version from the authoritative balance snapshot', { operation });
+        }
+        if (!Array.isArray(payload.allocations) || payload.allocations.length === 0) {
+          throw contractError('INVALID_ECONOMY_PORT_REQUEST', 'DISTRIBUTE requires non-empty allocations', { operation });
+        }
+        let allocationTotal = 0n;
+        for (const [index, allocation] of payload.allocations.entries()) {
+          assertPlainObject(allocation, `payload.allocations[${index}]`);
+          assertNonEmptyString(allocation.principal_ref, `payload.allocations[${index}].principal_ref`);
+          assertMicroEString(allocation.amount_micro_e, { field: `payload.allocations[${index}].amount_micro_e` });
+          allocationTotal += BigInt(allocation.amount_micro_e);
+        }
+        if (allocationTotal !== BigInt(payload.expected_balance_micro_e)
+            || BigInt(payload.amount_micro_e) !== BigInt(payload.expected_balance_micro_e)) {
+          throw contractError('ESCROW_ALLOCATION_MISMATCH', 'DISTRIBUTE amount and allocation total must equal the authoritative expected escrow balance', { operation });
+        }
       }
       break;
     case 'ledger':
@@ -218,6 +252,35 @@ export function assertEconomyPortResponse(operation, response) {
     }
     if (response.error === null || response.error === undefined) {
       throw contractError('INVALID_ECONOMY_PORT_RESPONSE', `${response.status} must include error`, { operation });
+    }
+  }
+
+  if (operation === 'escrow' && ['SUCCEEDED','DUPLICATE'].includes(response.status)) {
+    const action = response.result.escrow_action;
+    if (!ESCROW_ACTIONS.has(action)) {
+      throw contractError('INVALID_ECONOMY_PORT_RESPONSE', 'escrow result must echo a supported escrow_action', { operation });
+    }
+    if (action === 'BALANCE') {
+      assertNonEmptyString(response.result.escrow_ref, 'response.result.escrow_ref');
+      assertMicroEString(response.result.balance_micro_e, { field: 'response.result.balance_micro_e' });
+      assertNonEmptyString(response.result.receipt_ref, 'response.result.receipt_ref');
+      assertNonEmptyString(response.result.observed_at, 'response.result.observed_at');
+      if (!Number.isFinite(Date.parse(response.result.observed_at))) {
+        throw contractError('INVALID_ECONOMY_PORT_RESPONSE', 'BALANCE observed_at must be a timestamp', { operation });
+      }
+      if (response.resource_version === undefined) {
+        throw contractError('INVALID_ECONOMY_PORT_RESPONSE', 'BALANCE must return authoritative resource_version', { operation });
+      }
+    }
+    if (action === 'DISTRIBUTE') {
+      assertNonEmptyString(response.result.escrow_ref, 'response.result.escrow_ref');
+      assertNonEmptyString(response.result.settlement_ref, 'response.result.settlement_ref');
+      assertNonEmptyString(response.result.receipt_ref, 'response.result.receipt_ref');
+      assertMicroEString(response.result.distributed_micro_e, { field: 'response.result.distributed_micro_e' });
+      assertMicroEString(response.result.escrow_balance_after_micro_e, { field: 'response.result.escrow_balance_after_micro_e' });
+      if (response.resource_version === undefined) {
+        throw contractError('INVALID_ECONOMY_PORT_RESPONSE', 'DISTRIBUTE must return authoritative resource_version', { operation });
+      }
     }
   }
 

@@ -39,6 +39,36 @@ async function acceptanceCount(client, contract) {
   );
   return result.rows[0].count;
 }
+function validateEscrowSnapshot(snapshot, expectedEscrowRef) {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    throw problem('AUTHORITATIVE_ESCROW_SNAPSHOT_REQUIRED', 'settlement requires a trusted authoritative escrow balance snapshot');
+  }
+  nonEmpty(snapshot.escrowRef, 'escrowSnapshot.escrowRef');
+  nonEmpty(snapshot.balanceMicroE, 'escrowSnapshot.balanceMicroE');
+  nonEmpty(snapshot.authorityVersion, 'escrowSnapshot.authorityVersion');
+  nonEmpty(snapshot.receiptRef, 'escrowSnapshot.receiptRef');
+  nonEmpty(snapshot.observedAt, 'escrowSnapshot.observedAt');
+  if (snapshot.escrowRef !== expectedEscrowRef) {
+    throw problem('CONTRACT_ESCROW_REFERENCE_MISMATCH', 'authoritative snapshot must refer to the contract escrow');
+  }
+  if (!/^(0|[1-9]\d*)$/.test(snapshot.balanceMicroE) || BigInt(snapshot.balanceMicroE) <= 0n) {
+    throw problem('ESCROW_BALANCE_NOT_DISTRIBUTABLE', 'authoritative escrow balance must be a positive integer microE string');
+  }
+  if (!/^(0|[1-9]\d*)$/.test(snapshot.authorityVersion)) {
+    throw problem('INVALID_ESCROW_SNAPSHOT', 'authoritative escrow resource version must be a non-negative integer string', 400);
+  }
+  if (!Number.isFinite(Date.parse(snapshot.observedAt))) {
+    throw problem('INVALID_ESCROW_SNAPSHOT', 'authoritative escrow snapshot observation time must be a timestamp', 400);
+  }
+  return {
+    escrowRef: snapshot.escrowRef,
+    balanceMicroE: snapshot.balanceMicroE,
+    authorityVersion: snapshot.authorityVersion,
+    receiptRef: snapshot.receiptRef,
+    observedAt: new Date(snapshot.observedAt).toISOString(),
+  };
+}
+
 function assertAllocations(allocations, amountMicroE) {
   if (!Array.isArray(allocations) || allocations.length === 0) throw problem('INVALID_CONTRACT_SAGA_INPUT', 'allocations must be a non-empty array', 400);
   let total = 0n;
@@ -50,7 +80,7 @@ function assertAllocations(allocations, amountMicroE) {
     }
     total += BigInt(item.amount_micro_e);
   }
-  if (total !== BigInt(amountMicroE)) throw problem('INVALID_CONTRACT_SAGA_INPUT', 'allocation total must equal the frozen contract price', 400);
+  if (total !== BigInt(amountMicroE)) throw problem('INVALID_CONTRACT_SAGA_INPUT', 'allocation total must equal the authoritative distributable escrow balance', 400);
 }
 
 /** Prepare activation Saga + Outbox inside the same NH-local transaction as the command. */
@@ -110,14 +140,24 @@ export async function prepareContractSettlement(client, input) {
     }
   }
 
-  const amountMicroE = String(contract.price_micro_e);
+  const escrowSnapshot = validateEscrowSnapshot(input.escrowSnapshot, input.escrowRef);
+  const amountMicroE = escrowSnapshot.balanceMicroE;
   assertAllocations(input.allocations, amountMicroE);
   const saga = createContractSettlementSaga({
     sagaId: input.sagaId, worldId: input.worldId, contractId: input.contractId,
     contractVersion: contract.current_version, businessAttemptId: input.businessAttemptId,
     settlementRequest: {
       principal_ref: input.principalRef,
-      payload: { contract_ref: input.contractRef, amount_micro_e: amountMicroE, escrow_ref: input.escrowRef, allocations: input.allocations },
+      payload: {
+        contract_ref: input.contractRef,
+        amount_micro_e: amountMicroE,
+        escrow_ref: escrowSnapshot.escrowRef,
+        expected_balance_micro_e: escrowSnapshot.balanceMicroE,
+        expected_resource_version: escrowSnapshot.authorityVersion,
+        balance_receipt_ref: escrowSnapshot.receiptRef,
+        balance_observed_at: escrowSnapshot.observedAt,
+        allocations: input.allocations,
+      },
     },
   });
   return prepareSagaIntent(client, saga);

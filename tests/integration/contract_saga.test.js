@@ -111,13 +111,42 @@ test('settlement requires frozen escrow allocation, then converges forward to SE
     worldId:fx.worldId,contractId:fx.contract.contract_id,sagaId:crypto.randomUUID(),
     businessAttemptId:crypto.randomUUID(),principalRef:'principal:employer',contractRef:'contract-ref:'+fx.contract.contract_id,
     escrowRef:'kb-escrow:'+fx.contract.contract_id,
-    allocations:[{principal_ref:'principal:contractor',amount_micro_e:'20000000'}],
+    escrowSnapshot:{
+      escrowRef:'kb-escrow:'+fx.contract.contract_id,balanceMicroE:'15000000',
+      authorityVersion:'12',receiptRef:'kb-balance-receipt:'+fx.contract.contract_id,
+      observedAt:'2026-10-20T08:00:00Z',
+    },
+    allocations:[{principal_ref:'principal:contractor',amount_micro_e:'15000000'}],
   }));
   assert.equal(prepared.outbox.command_snapshot.payload.escrow_action,'DISTRIBUTE');
+  assert.equal(prepared.outbox.command_snapshot.payload.amount_micro_e,'15000000');
+  assert.equal(prepared.outbox.command_snapshot.payload.expected_balance_micro_e,'15000000');
+  assert.equal(prepared.outbox.command_snapshot.payload.expected_resource_version,'12');
+  assert.equal(prepared.outbox.command_snapshot.payload.balance_receipt_ref,'kb-balance-receipt:'+fx.contract.contract_id);
   await observe(fx.worldId,prepared.outbox,'kb-settlement:'+fx.contract.contract_id);
   const committed = await withTransaction(pool,(client)=>commitContractSettlement(client,{worldId:fx.worldId,sagaId:prepared.saga.saga_id}));
   assert.equal(committed.contractState,'SETTLED');
   assert.equal((await pool.query('SELECT status FROM social.contracts WHERE contract_id=$1',[fx.contract.contract_id])).rows[0].status,'SETTLED');
+});
+
+test('settlement fails closed without an authoritative escrow balance snapshot', async () => {
+  const fx = await fixture();
+  await activate(fx);
+  await pool.query("UPDATE social.contracts SET status='SUBMITTED' WHERE world_id=$1 AND contract_id=$2",[fx.worldId,fx.contract.contract_id]);
+  await pool.query(
+    "INSERT INTO social.deliveries (world_id,contract_id,version,submission_no,submitted_by_entity_id,artifact_ref,idempotency_key,status) VALUES ($1,$2,1,1,$3,$4,$5,'ACCEPTED')",
+    [fx.worldId,fx.contract.contract_id,fx.contractor.entity_id,'artifact://accepted','delivery-'+crypto.randomUUID()],
+  );
+  await assert.rejects(
+    () => withTransaction(pool,(client)=>prepareContractSettlement(client,{
+      worldId:fx.worldId,contractId:fx.contract.contract_id,sagaId:crypto.randomUUID(),
+      businessAttemptId:crypto.randomUUID(),principalRef:'principal:employer',contractRef:'contract-ref:'+fx.contract.contract_id,
+      escrowRef:'kb-escrow:'+fx.contract.contract_id,
+      allocations:[{principal_ref:'principal:contractor',amount_micro_e:'20000000'}],
+    })),
+    error=>error.code==='AUTHORITATIVE_ESCROW_SNAPSHOT_REQUIRED',
+  );
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM social.cross_product_outbox WHERE world_id=$1",[fx.worldId])).rows[0].n,1);
 });
 
 test('settlement fails closed when SUBMITTED has no accepted delivery decision', async () => {
@@ -149,6 +178,11 @@ test('settlement rejects allocations that do not conserve the contract amount', 
       worldId:fx.worldId,contractId:fx.contract.contract_id,sagaId:crypto.randomUUID(),
       businessAttemptId:crypto.randomUUID(),principalRef:'principal:employer',contractRef:'contract-ref:'+fx.contract.contract_id,
       escrowRef:'kb-escrow:'+fx.contract.contract_id,
+      escrowSnapshot:{
+        escrowRef:'kb-escrow:'+fx.contract.contract_id,balanceMicroE:'20000000',
+        authorityVersion:'12',receiptRef:'kb-balance-receipt:'+fx.contract.contract_id,
+        observedAt:'2026-10-20T08:00:00Z',
+      },
       allocations:[{principal_ref:'principal:contractor',amount_micro_e:'19999999'}],
     })),
     (error)=>error.code==='INVALID_CONTRACT_SAGA_INPUT',
