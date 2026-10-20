@@ -243,7 +243,7 @@ export class OpenAICompatibleLocalModelAdapter {
     };
   }
 
-  async send({ executionId, attemptId, modelReference, payload, idempotencyKey = null }) {
+  async send({ executionId, attemptId, modelReference, payload, idempotencyKey = null, authorization = null }) {
     requireNonEmptyString(executionId, 'executionId');
     requireNonEmptyString(attemptId, 'attemptId');
     requireNonEmptyString(modelReference, 'modelReference');
@@ -258,6 +258,12 @@ export class OpenAICompatibleLocalModelAdapter {
       'x-newhumans-attempt-id': attemptId,
     };
     if (idempotencyKey) headers['idempotency-key'] = idempotencyKey;
+    if (authorization !== null) {
+      if (typeof authorization !== 'string' || authorization.length === 0 || /[\r\n]/.test(authorization)) {
+        throw adapterError('INVALID_ADAPTER_INPUT', 'authorization must be a non-empty single-line string when provided');
+      }
+      headers.authorization = authorization;
+    }
     return this.#request('send', {
       method: 'POST',
       routeArgs: [executionId],
