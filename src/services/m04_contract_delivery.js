@@ -52,7 +52,6 @@ export async function submitDelivery(client, input) {
   }
   const contract=await lockContract(client,{worldId,contractId});
   if (actorEntityId !== contract.contractor_entity_id) throw problem('FORBIDDEN', 'only the contractor may submit delivery', 403);
-  if (contract.status !== 'ACTIVE') throw problem('CONTRACT_NOT_DELIVERABLE', 'delivery requires an ACTIVE contract', 409);
   assertVersion(contract,input.expectedVersion);
 
   const existing=await client.query(
@@ -66,6 +65,7 @@ export async function submitDelivery(client, input) {
     }
     return {delivery:row,contractStatus:contract.status,replayed:true};
   }
+  if (contract.status !== 'ACTIVE') throw problem('CONTRACT_NOT_DELIVERABLE', 'delivery requires an ACTIVE contract', 409);
 
   const seq=await client.query(
     'SELECT COALESCE(MAX(submission_no),0)::integer+1 AS next_no FROM social.deliveries WHERE world_id=$1 AND contract_id=$2 AND version=$3',
