@@ -212,7 +212,7 @@ test('database rejects route pointer changes without version fencing or to stale
   const agent = await makeAgent('route-pointer-fence');
   const first = await installInitialRoute(agent, 'route-pointer-first');
   const profileBefore = (await pool.query(
-    \`SELECT current_route_id,profile_version FROM runtime.agent_profiles WHERE world_id=$1 AND agent_entity_id=$2\`,
+    `SELECT current_route_id,profile_version FROM runtime.agent_profiles WHERE world_id=$1 AND agent_entity_id=$2`,
     [world, agent.entity_id],
   )).rows[0];
   const gateway = await descriptorConnector('route-pointer-second');
@@ -228,20 +228,20 @@ test('database rejects route pointer changes without version fencing or to stale
   }));
   await assert.rejects(
     () => pool.query(
-      \`UPDATE runtime.agent_profiles SET current_route_id=$3 WHERE world_id=$1 AND agent_entity_id=$2\`,
+      `UPDATE runtime.agent_profiles SET current_route_id=$3 WHERE world_id=$1 AND agent_entity_id=$2`,
       [world, agent.entity_id, first.route.route_id],
     ),
     /profile_version exactly once/i,
   );
   await assert.rejects(
     () => pool.query(
-      \`UPDATE runtime.agent_profiles SET current_route_id=$3,profile_version=profile_version+1 WHERE world_id=$1 AND agent_entity_id=$2\`,
+      `UPDATE runtime.agent_profiles SET current_route_id=$3,profile_version=profile_version+1 WHERE world_id=$1 AND agent_entity_id=$2`,
       [world, agent.entity_id, first.route.route_id],
     ),
     /latest authoritative route version/i,
   );
   const current = (await pool.query(
-    \`SELECT current_route_id FROM runtime.agent_profiles WHERE world_id=$1 AND agent_entity_id=$2\`,
+    `SELECT current_route_id FROM runtime.agent_profiles WHERE world_id=$1 AND agent_entity_id=$2`,
     [world, agent.entity_id],
   )).rows[0];
   assert.equal(current.current_route_id, second.route.route_id);
