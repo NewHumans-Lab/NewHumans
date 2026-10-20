@@ -459,6 +459,15 @@ export async function infer(pool, input, { fetchImpl = globalThis.fetch, now = (
           json: async () => adapterPayload,
         };
       } catch (error) {
+        const connectCode = error?.cause?.cause?.code ?? error?.cause?.code;
+        if (CONFIRMED_CONNECT_FAILURES.has(connectCode)) {
+          if (attemptNo < allowedAttempts) {
+            await markRetryableFailure(pool,prepared,attempt,null,connectCode);
+            await sleep(Math.min(100 * attemptNo,500));
+            continue;
+          }
+          return finalizeFailure(pool,prepared,attempt,{code:'PROVIDER_CONNECT_FAILED',message:'provider connection failed before a response'});
+        }
         if (error?.outcomeUnknown) {
           return finalizeUnknown(pool,prepared,attempt,{code:error.code || 'PROVIDER_OUTCOME_UNKNOWN',message:'provider adapter could not establish a trustworthy execution outcome'});
         }
