@@ -42,6 +42,8 @@ Implementation evidence:
 - [P1.4.1 billing evidence immutability](docs/implementation/P1_4_1_Billing_Immutability.md)
 - [P3-A M02 runtime kernel](docs/implementation/P3_A_M02_Runtime_Kernel.md)
 - [P3-B M02 continuous runtime control](docs/implementation/P3_B_Continuous_Runtime_Control.md)
+- [Cross-module integration readiness matrix](docs/implementation/NH-047_Cross_Module_Integration_Readiness.md)
+- [Design-to-implementation delta](docs/implementation/NH_048_Design_Spec_Delta.md)
 
 ## Start here
 
