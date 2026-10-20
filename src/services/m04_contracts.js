@@ -10,7 +10,7 @@ function requiredString(value, field) {
 }
 
 function positivePrice(value) {
-  if (typeof value !== 'string' || !/^(0|[1-9]\\d*)$/.test(value)) {
+  if (typeof value !== 'string' || !/^(0|[1-9]\d*)$/.test(value)) {
     throw problem('INVALID_CONTRACT_INPUT', 'priceMicroE must be a non-negative integer string', 400);
   }
   return value;
