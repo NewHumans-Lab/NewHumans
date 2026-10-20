@@ -1,4 +1,4 @@
-CREATE TABLE core.knowledge_ball_identity_bindings (
+CREATE TABLE core.entity_provider_bindings (
   binding_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   world_id text NOT NULL,
   entity_id uuid NOT NULL,
@@ -26,17 +26,17 @@ CREATE TABLE core.knowledge_ball_identity_bindings (
 );
 
 CREATE UNIQUE INDEX knowledge_ball_binding_active_entity_idx
-  ON core.knowledge_ball_identity_bindings(world_id, entity_id, provider)
+  ON core.entity_provider_bindings(world_id, entity_id, provider)
   WHERE status = 'ACTIVE';
 
 -- A KB principal must not silently become two NewHumans identities. Principal refs are
 -- canonical, opaque identifiers returned by the trusted KB identity provider.
 CREATE UNIQUE INDEX knowledge_ball_binding_active_principal_idx
-  ON core.knowledge_ball_identity_bindings(provider, principal_ref)
+  ON core.entity_provider_bindings(provider, principal_ref)
   WHERE status = 'ACTIVE';
 
 CREATE INDEX knowledge_ball_binding_history_idx
-  ON core.knowledge_ball_identity_bindings(world_id, entity_id, binding_version DESC);
+  ON core.entity_provider_bindings(world_id, entity_id, binding_version DESC);
 
 CREATE OR REPLACE FUNCTION core.guard_knowledge_ball_binding_update() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -63,10 +63,10 @@ BEGIN
 END $$;
 
 CREATE TRIGGER knowledge_ball_binding_update_guard
-BEFORE UPDATE ON core.knowledge_ball_identity_bindings
+BEFORE UPDATE ON core.entity_provider_bindings
 FOR EACH ROW EXECUTE FUNCTION core.guard_knowledge_ball_binding_update();
 
-COMMENT ON TABLE core.knowledge_ball_identity_bindings IS
+COMMENT ON TABLE core.entity_provider_bindings IS
   'Auditable, versioned mapping from a NewHumans Entity to an opaque Knowledge Ball principal. This table is identity metadata only; it is not an Economy, Memory, or Knowledge authority.';
-COMMENT ON COLUMN core.knowledge_ball_identity_bindings.principal_ref IS
+COMMENT ON COLUMN core.entity_provider_bindings.principal_ref IS
   'Opaque canonical principal reference returned by a trusted Knowledge Ball identity provider; never trust a client-supplied value.';
