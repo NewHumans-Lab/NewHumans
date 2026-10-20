@@ -4,6 +4,7 @@ import { withTransaction } from '../db.js';
 import { appendEvent, hashPayload, resolveActor } from './core.js';
 import { releaseReservation, settleReservation } from './economy.js';
 import { createOpenAICompatibleLocalModelAdapter } from './providers/local_model_adapter.js';
+import { createJsonHttpCloudModelAdapter } from './providers/cloud_model_adapter.js';
 
 const ONE_MILLION = 1_000_000n;
 const RETRYABLE_HTTP = new Set([408, 429, 500, 502, 503, 504]);
@@ -435,8 +436,14 @@ export async function infer(pool, input, { fetchImpl = globalThis.fetch, now = (
     let response;
     let adapterPayload = null;
     let adapterRequestId = null;
-    if (prepared.plan.connector_kind === 'LOCAL_SELF_HOSTED') {
-      const adapter = createOpenAICompatibleLocalModelAdapter({
+    if (['LOCAL_SELF_HOSTED', 'CLOUD'].includes(prepared.plan.connector_kind)) {
+      const adapter = prepared.plan.connector_kind === 'CLOUD'
+        ? createJsonHttpCloudModelAdapter({
+          baseUrl: prepared.plan.base_url,
+          timeoutMs: Number(prepared.plan.timeout_ms),
+          fetchImpl,
+        })
+        : createOpenAICompatibleLocalModelAdapter({
         baseUrl: prepared.plan.base_url,
         timeoutMs: Number(prepared.plan.timeout_ms),
         fetchImpl,
