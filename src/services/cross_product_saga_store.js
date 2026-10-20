@@ -120,7 +120,16 @@ export async function recordSagaFinancialResult(client, { worldId, operationKey,
     return { duplicate: false, conflict: true, saga: { ...row, state: SagaState.RECONCILIATION_REQUIRED }, outbox: null };
   }
   let next;
-  try { next = observeFinancialResult(snapshotOf(row),normalized); }
+  try {
+    const persistedSnapshot = snapshotOf(row);
+    if (persistedSnapshot.state === SagaState.RECONCILIATION_REQUIRED) {
+      // A previously unknown outcome may be resolved by authoritative evidence.
+      // Conflicting-result freezes already have a result recorded and remain frozen.
+      if (!persistedSnapshot.primary_result && operationKey === persistedSnapshot.primary_operation_key) persistedSnapshot.state = SagaState.PENDING_REMOTE;
+      else if (!persistedSnapshot.compensation_result && operationKey === persistedSnapshot.compensation_operation_key) persistedSnapshot.state = SagaState.COMPENSATION_PENDING;
+    }
+    next = observeFinancialResult(persistedSnapshot,normalized);
+  }
   catch (error) {
     if (!['SAGA_IDEMPOTENCY_CONFLICT','SAGA_RESULT_CONFLICT'].includes(error?.code)) throw error;
     await client.query("UPDATE social.cross_product_sagas SET state='RECONCILIATION_REQUIRED',saga_snapshot=jsonb_set(saga_snapshot,'{state}','\"RECONCILIATION_REQUIRED\"'::jsonb),last_error_code=$2,last_error_at=now(),next_reconcile_at=now(),version=version+1,updated_at=now() WHERE saga_id=$1 AND world_id=$3",[row.saga_id,error.code,worldId]);
