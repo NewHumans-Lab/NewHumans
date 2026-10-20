@@ -35,7 +35,7 @@ async function lockBindingAggregate(client, { worldId, entityId }) {
 
 async function assertNoActiveBinding(client, { worldId, entityId }) {
   const existing=await client.query(
-    "SELECT binding_id FROM core.knowledge_ball_identity_bindings WHERE world_id=$1 AND entity_id=$2 AND provider='knowledge-ball' AND status='ACTIVE' FOR UPDATE",
+    "SELECT binding_id FROM core.entity_provider_bindings WHERE world_id=$1 AND entity_id=$2 AND provider='knowledge-ball' AND status='ACTIVE' FOR UPDATE",
     [worldId,entityId],
   );
   if (existing.rowCount) throw problem('KB_PRINCIPAL_ALREADY_BOUND', 'revoke the active binding before linking a different Knowledge Ball principal', 409);
@@ -80,12 +80,12 @@ export async function bindKnowledgeBallPrincipal(pool, input, { identityPort } =
     await authorizeBindingActor(client,{worldId,actorEntityId,entityId});
     await assertNoActiveBinding(client,{worldId,entityId});
     const versionResult=await client.query(
-      "SELECT COALESCE(MAX(binding_version),0)::integer+1 AS next_version FROM core.knowledge_ball_identity_bindings WHERE world_id=$1 AND entity_id=$2 AND provider='knowledge-ball'",
+      "SELECT COALESCE(MAX(binding_version),0)::integer+1 AS next_version FROM core.entity_provider_bindings WHERE world_id=$1 AND entity_id=$2 AND provider='knowledge-ball'",
       [worldId,entityId],
     );
     const bindingVersion=versionResult.rows[0].next_version;
     const inserted=await client.query(
-      "INSERT INTO core.knowledge_ball_identity_bindings (world_id,entity_id,provider,principal_ref,binding_version,status,verified_by_entity_id,verification_ref,verified_at) VALUES ($1,$2,'knowledge-ball',$3,$4,'ACTIVE',$5,$6,$7::timestamptz) RETURNING binding_id,binding_version,status,verified_at",
+      "INSERT INTO core.entity_provider_bindings (world_id,entity_id,provider,principal_ref,binding_version,status,verified_by_entity_id,verification_ref,verified_at) VALUES ($1,$2,'knowledge-ball',$3,$4,'ACTIVE',$5,$6,$7::timestamptz) RETURNING binding_id,binding_version,status,verified_at",
       [worldId,entityId,verified.principalRef.trim(),bindingVersion,actorEntityId,verified.verificationRef.trim(),new Date(verified.verifiedAt).toISOString()],
     );
     await appendEvent(client,{
@@ -100,7 +100,7 @@ export async function bindKnowledgeBallPrincipal(pool, input, { identityPort } =
 export async function resolveKnowledgeBallPrincipal(client, { worldId, entityId }) {
   requiredString(worldId,'worldId'); requiredString(entityId,'entityId');
   const result=await client.query(
-    "SELECT b.binding_id,b.provider,b.principal_ref,b.binding_version,b.verified_at FROM core.knowledge_ball_identity_bindings b JOIN core.entities e ON e.world_id=b.world_id AND e.entity_id=b.entity_id WHERE b.world_id=$1 AND b.entity_id=$2 AND b.status='ACTIVE' AND e.identity_status='ACTIVE'",
+    "SELECT b.binding_id,b.provider,b.principal_ref,b.binding_version,b.verified_at FROM core.entity_provider_bindings b JOIN core.entities e ON e.world_id=b.world_id AND e.entity_id=b.entity_id WHERE b.world_id=$1 AND b.entity_id=$2 AND b.status='ACTIVE' AND e.identity_status='ACTIVE'",
     [worldId,entityId],
   );
   if (result.rowCount !== 1) throw problem('KB_PRINCIPAL_BINDING_REQUIRED', 'Entity has no active verified Knowledge Ball principal binding', 409);
@@ -122,12 +122,12 @@ export async function revokeKnowledgeBallPrincipalBinding(pool, input) {
     await lockBindingAggregate(client,{worldId,entityId});
     await authorizeBindingActor(client,{worldId,actorEntityId,entityId});
     const active=await client.query(
-      "SELECT binding_id,binding_version FROM core.knowledge_ball_identity_bindings WHERE world_id=$1 AND entity_id=$2 AND provider='knowledge-ball' AND status='ACTIVE' FOR UPDATE",
+      "SELECT binding_id,binding_version FROM core.entity_provider_bindings WHERE world_id=$1 AND entity_id=$2 AND provider='knowledge-ball' AND status='ACTIVE' FOR UPDATE",
       [worldId,entityId],
     );
     if (active.rowCount !== 1) throw problem('KB_PRINCIPAL_BINDING_NOT_FOUND', 'no active Knowledge Ball principal binding exists', 404);
     await client.query(
-      "UPDATE core.knowledge_ball_identity_bindings SET status='REVOKED',revoked_by_entity_id=$3,revoked_at=now(),revoke_reason=$4 WHERE world_id=$1 AND binding_id=$2",
+      "UPDATE core.entity_provider_bindings SET status='REVOKED',revoked_by_entity_id=$3,revoked_at=now(),revoke_reason=$4 WHERE world_id=$1 AND binding_id=$2",
       [worldId,active.rows[0].binding_id,actorEntityId,reason],
     );
     await appendEvent(client,{
