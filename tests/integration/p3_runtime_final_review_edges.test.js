@@ -106,6 +106,14 @@ test('ordinary Basic-prefixed text is allowed while credential-shaped Basic auth
     })),
     (error) => error.code === '23514' || error.code === 'SECRET_MATERIAL_FORBIDDEN',
   );
+  await assert.rejects(
+    () => withTransaction(pool, (client) => registerModelManifest(client, {
+      worldId: world, agentEntityId: agent.entity_id, descriptorId: gateway.descriptor.descriptor_id,
+      connectorId: gateway.connector.connector_id, promptVersion: 'short-bearer',
+      samplingSettings: { note: 'Bearer abc123' }, actorEntityId: system.entity_id,
+    })),
+    (error) => error.code === '23514' || error.code === 'SECRET_MATERIAL_FORBIDDEN',
+  );
 });
 
 test('checkpoint goal refs reject extra fields and oversized versions as validation errors', async () => {
