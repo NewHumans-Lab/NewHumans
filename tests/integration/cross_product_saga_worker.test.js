@@ -39,7 +39,7 @@ function success(request, resultRef = 'kb-escrow:1') {
     operation: 'escrow',
     request_id: request.request_id,
     status: 'SUCCEEDED',
-    operation_ref: resultRef,
+    operation_ref: 'op:escrow:' + resultRef,
     result: { escrow_ref: resultRef, escrow_action: request.payload.escrow_action, amount_micro_e: request.payload.amount_micro_e },
     error: null,
   };
@@ -59,6 +59,7 @@ test('outbox worker dispatches EconomyPort request and commits authoritative suc
   assert.equal(captured.payload.escrow_action, 'FUND');
   assert.equal((await pool.query('SELECT state FROM social.cross_product_sagas WHERE saga_id=$1', [fx.saga.saga_id])).rows[0].state, SagaState.REMOTE_SUCCEEDED);
   assert.equal((await pool.query('SELECT status FROM social.cross_product_outbox WHERE outbox_id=$1', [fx.prepared.outbox.outbox_id])).rows[0].status, 'DELIVERED');
+  assert.equal((await pool.query('SELECT result_snapshot->>\'result_ref\' AS result_ref FROM social.cross_product_inbox WHERE world_id=$1 AND operation_key=$2', [fx.worldId,fx.command.operation_key])).rows[0].result_ref, 'kb-escrow:1');
 });
 
 test('retryable EconomyPort timeout reuses the logical funds key but issues a new transport request id', async () => {
