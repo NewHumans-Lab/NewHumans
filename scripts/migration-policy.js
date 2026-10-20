@@ -8,6 +8,7 @@ export const MIGRATION_NAMESPACES = Object.freeze([
 
 // The pre-namespace history is immutable. PR #17 was already open when the namespace
 // policy was introduced, so its existing migration files are grandfathered explicitly.
+// Keep the exact PR #17 filenames synchronized with NH-049; never relax the pattern.
 // Anything else below 0300 is rejected instead of extending the old global counter.
 export const LEGACY_MIGRATION_ALLOWLIST = Object.freeze([
   '001_p0_p1_foundation.sql',
