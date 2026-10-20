@@ -52,6 +52,7 @@ function successReference(response) {
 export async function dispatchSagaOutboxOnce(pool, {
   workerId,
   economyPort,
+  worldId,
   leaseMs = 30_000,
   maxAttempts = 5,
   retryAfterMs = 1_000,
@@ -62,7 +63,7 @@ export async function dispatchSagaOutboxOnce(pool, {
     error.code = 'KB_ECONOMY_PORT_UNAVAILABLE';
     throw error;
   }
-  const claimed = await claimSagaOutbox(pool, { workerId, leaseMs });
+  const claimed = await claimSagaOutbox(pool, { workerId, leaseMs, worldId });
   if (!claimed) return { claimed: false, outcome: 'IDLE' };
 
   const command = objectSnapshot(claimed.command_snapshot, 'command_snapshot');
