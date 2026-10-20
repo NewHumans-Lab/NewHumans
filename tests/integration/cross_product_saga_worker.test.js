@@ -50,6 +50,7 @@ test('outbox worker dispatches EconomyPort request and commits authoritative suc
   let captured;
   const result = await dispatchSagaOutboxOnce(pool, {
     workerId: 'worker-success',
+    worldId: fx.worldId,
     economyPort: { escrow: async (request) => { captured = request; return success(request); } },
   });
   assert.equal(result.outcome, 'DELIVERED');
@@ -75,10 +76,10 @@ test('retryable EconomyPort timeout reuses the logical funds key but issues a ne
     };
     return success(request, 'kb-escrow:retry');
   } };
-  const first = await dispatchSagaOutboxOnce(pool, { workerId: 'worker-timeout', economyPort, retryAfterMs: 1000 });
+  const first = await dispatchSagaOutboxOnce(pool, { workerId: 'worker-timeout', worldId: fx.worldId, economyPort, retryAfterMs: 1000 });
   assert.equal(first.outcome, 'RETRY_SCHEDULED');
   await pool.query('UPDATE social.cross_product_outbox SET next_attempt_at=now() WHERE outbox_id=$1', [fx.prepared.outbox.outbox_id]);
-  const second = await dispatchSagaOutboxOnce(pool, { workerId: 'worker-timeout', economyPort });
+  const second = await dispatchSagaOutboxOnce(pool, { workerId: 'worker-timeout', worldId: fx.worldId, economyPort });
   assert.equal(second.outcome, 'DELIVERED');
   assert.equal(requests.length, 2);
   assert.equal(requests[0].idempotency_key, requests[1].idempotency_key);
@@ -90,6 +91,7 @@ test('ambiguous transport failure blocks resend until authoritative lookup prove
   const fx = await prepare();
   const dispatch = await dispatchSagaOutboxOnce(pool, {
     workerId: 'worker-unknown',
+    worldId: fx.worldId,
     economyPort: { escrow: async () => { throw Object.assign(new Error('socket closed after dispatch'), { code: 'ECONNRESET' }); } },
   });
   assert.equal(dispatch.outcome, 'RECONCILIATION_REQUIRED');
