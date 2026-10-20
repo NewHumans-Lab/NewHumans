@@ -105,6 +105,7 @@ test('settlement dispatch persists the settlement receipt rather than treating e
         expected_balance_micro_e: '15000000',
         expected_resource_version: '12',
         balance_receipt_ref: 'kb-balance-receipt:1',
+        balance_observed_at: '2026-10-20T08:00:00Z',
         allocations: [{ principal_ref: 'principal:contractor', amount_micro_e: '15000000' }],
       },
     },
