@@ -52,6 +52,7 @@ A task that touches only documentation still must pass the repository-required P
 
 - This matrix is refreshed against `main@4d3986fc507cceb803b7b6670271e53ad9cd20e9` on 2026-10-20. NH-001 PR #17 is merged and its final-head Task Acceptance passed; the P0-P1 CI run on the merge commit passed.
 - These results verify the bounded M02 runtime-hardening slice only. They do not establish a live model provider, a production Knowledge Ball connection, or a complete autonomous cognition path.
+- Verification run references: P0-P1 CI on the merge commit `4d3986fc507cceb803b7b6670271e53ad9cd20e9` is workflow run `39354897279`; final-head Task Acceptance for NH-001 is workflow run `39354935874`.
 - The original NH-047 task-card scope was not present in the repository or discoverable among its PRs/issues. This file records a conservative integration-readiness deliverable from the observable gaps; it does not claim to recover an unavailable prior task description.
 - Knowledge Ball internals are outside this task. No production provider, Knowledge Ball deployment, real credential, or product UI is altered by this document.
 
