@@ -256,12 +256,6 @@ export async function publishModelRoute(client, {
      RETURNING route_id,world_id,agent_entity_id,route_version,manifest_id,route_policy,max_turn_budget_micro_e,reason,created_at`,
     [worldId, agentEntityId, next, manifestId, JSON.stringify(routePolicy), maxTurnBudgetMicroE, reason, actorEntityId],
   )).rows[0];
-  await client.query(
-    `UPDATE runtime.agent_profiles
-        SET current_route_id=$3,profile_version=profile_version+1,updated_at=now()
-      WHERE world_id=$1 AND agent_entity_id=$2`,
-    [worldId, agentEntityId, route.route_id],
-  );
   const lifecycle = (await client.query(
     `UPDATE runtime.lifecycle_states
         SET model_status='AVAILABLE',
@@ -280,6 +274,12 @@ export async function publishModelRoute(client, {
      RETURNING model_change_id,from_route_id,to_route_id,created_at`,
     [worldId, agentEntityId, profile.current_route_id, route.route_id, reason, actionId ?? null, actorEntityId],
   )).rows[0];
+  await client.query(
+    `UPDATE runtime.agent_profiles
+        SET current_route_id=$3,profile_version=profile_version+1,updated_at=now()
+      WHERE world_id=$1 AND agent_entity_id=$2`,
+    [worldId, agentEntityId, route.route_id],
+  );
   if (actionId) await appendEvent(client, {
     worldId,
     aggregateType: 'RUNTIME_AGENT',
