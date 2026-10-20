@@ -613,3 +613,45 @@ BEGIN
   END IF;
   RETURN NEW;
 END $$;
+
+-- The current route pointer is a database-authoritative reference, not a mutable
+-- convenience field. Every pointer change must advance the profile version exactly
+-- once and target the latest route belonging to the same Agent.
+CREATE OR REPLACE FUNCTION runtime.guard_current_route_pointer_update() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  target_version integer;
+  latest_version integer;
+BEGIN
+  IF NEW.current_route_id IS NOT DISTINCT FROM OLD.current_route_id THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.current_route_id IS NULL THEN
+    RAISE EXCEPTION 'current model route cannot be cleared outside an explicit route lifecycle operation' USING ERRCODE='23514';
+  END IF;
+  IF NEW.profile_version <> OLD.profile_version + 1 THEN
+    RAISE EXCEPTION 'current route pointer change must advance profile_version exactly once' USING ERRCODE='23514';
+  END IF;
+
+  SELECT route_version INTO target_version
+    FROM runtime.model_routes
+   WHERE world_id=NEW.world_id
+     AND agent_entity_id=NEW.agent_entity_id
+     AND route_id=NEW.current_route_id;
+  IF target_version IS NULL THEN
+    RAISE EXCEPTION 'current route pointer must reference a route owned by the same Agent and world' USING ERRCODE='23514';
+  END IF;
+
+  SELECT max(route_version) INTO latest_version
+    FROM runtime.model_routes
+   WHERE world_id=NEW.world_id AND agent_entity_id=NEW.agent_entity_id;
+  IF target_version IS DISTINCT FROM latest_version THEN
+    RAISE EXCEPTION 'current route pointer must reference the latest authoritative route version' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS agent_profiles_current_route_pointer_guard ON runtime.agent_profiles;
+CREATE TRIGGER agent_profiles_current_route_pointer_guard
+  BEFORE UPDATE OF current_route_id,profile_version ON runtime.agent_profiles
+  FOR EACH ROW EXECUTE FUNCTION runtime.guard_current_route_pointer_update();
