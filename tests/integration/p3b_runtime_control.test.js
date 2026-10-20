@@ -416,6 +416,41 @@ test('scheduled WAKE has one atomic path and M03 blocks before fee; adopted cont
   );
 });
 
+test('unfunded autonomous claim reconciles to DORMANT and releases the claimant lease', async () => {
+  const agent = await runtimeAgent('unfunded-claim', '100500000');
+  await installRoute(agent, 'unfunded-claim');
+  await adoptControlledContextStub(agent);
+  const yesterday = (await pool.query(`SELECT (CURRENT_DATE - 1)::text AS date`)).rows[0].date;
+  await withTransaction(pool, (client) => resumeRuntime(client, {
+    worldId: world, agentEntityId: agent.entity_id, billingDate: yesterday, actorEntityId: system.entity_id,
+  }));
+  const sink = await entity('HUMAN', 'unfunded-sink');
+  await withTransaction(pool, (client) => transfer(client, {
+    worldId: world, fromEntityId: agent.entity_id, toEntityId: sink.entity_id,
+    amountMicroE: '99000000', businessKey: 'unfunded-claim-drain', actorEntityId: agent.entity_id,
+  }));
+  const lease = await withTransaction(pool, (client) => acquireRuntimeLease(client, {
+    worldId: world, agentEntityId: agent.entity_id, workerId: 'unfunded-worker', actorEntityId: system.entity_id,
+  }));
+  const scheduled = await withTransaction(pool, (client) => scheduleAction(client, {
+    worldId: world, subjectId: agent.entity_id, actionKind: 'AUTONOMOUS_TURN',
+    dueAt: new Date(Date.now() - 60_000).toISOString(), missedPolicy: 'RUN_ONCE',
+    dedupeKey: 'unfunded-claim', actorEntityId: agent.entity_id,
+  }));
+  const result = await withTransaction(pool, (client) => claimAutonomousScheduledAction(client, {
+    worldId: world, scheduledActionId: scheduled.scheduled_action_id, workerId: lease.worker_id,
+    leaseEpoch: String(lease.lease_epoch), actorEntityId: system.entity_id,
+  }));
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.blocked_reason, 'DAILY_FEE_UNFUNDED');
+  assert.equal(result.lifecycle.life_status, 'DORMANT');
+  assert.equal(await feeCount(agent, (await pool.query(`SELECT CURRENT_DATE::text AS date`)).rows[0].date), 0);
+  assert.equal((await pool.query(
+    `SELECT 1 FROM runtime.runtime_leases WHERE world_id=$1 AND activity_subject_id=$2 AND released_at IS NULL AND expires_at > now()`,
+    [world, agent.entity_id],
+  )).rowCount, 0);
+});
+
 test('autonomous schedule claim is lease fenced and stale worker cannot complete', async () => {
   const agent = await readyAgent('scheduled-turn', '103000000');
   await withTransaction(pool, (client) => resumeRuntime(client, {
