@@ -16,7 +16,8 @@ async function authorizeBindingActor(client, { worldId, actorEntityId, entityId 
     "SELECT entity_id,identity_status FROM core.entities WHERE world_id=$1 AND entity_id = ANY($2::uuid[])",
     [worldId,[actorEntityId,entityId]],
   );
-  if (result.rowCount !== 2 || result.rows.some(row=>row.identity_status !== 'ACTIVE')) {
+  const expectedEntities = actorEntityId === entityId ? 1 : 2;
+  if (result.rowCount !== expectedEntities || result.rows.some(row=>row.identity_status !== 'ACTIVE')) {
     throw problem('IDENTITY_BINDING_ENTITY_INACTIVE', 'actor and target Entity must both be active in the trusted world', 403);
   }
   if (actorEntityId === entityId) return;
@@ -26,6 +27,10 @@ async function authorizeBindingActor(client, { worldId, actorEntityId, entityId 
     [worldId,entityId,actorEntityId],
   );
   if (grant.rowCount !== 1) throw problem('FORBIDDEN', 'binding another Entity requires an active identity.bind_knowledge_ball grant from that Entity', 403);
+}
+
+async function lockBindingAggregate(client, { worldId, entityId }) {
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[worldId+':'+entityId+':knowledge-ball-binding']);
 }
 
 async function assertNoActiveBinding(client, { worldId, entityId }) {
@@ -57,6 +62,7 @@ export async function bindKnowledgeBallPrincipal(pool, input, { identityPort } =
   }
 
   await withTransaction(pool,async client=>{
+    await lockBindingAggregate(client,{worldId,entityId});
     await authorizeBindingActor(client,{worldId,actorEntityId,entityId});
     await assertNoActiveBinding(client,{worldId,entityId});
   });
@@ -70,6 +76,7 @@ export async function bindKnowledgeBallPrincipal(pool, input, { identityPort } =
   }
 
   return withTransaction(pool,async client=>{
+    await lockBindingAggregate(client,{worldId,entityId});
     await authorizeBindingActor(client,{worldId,actorEntityId,entityId});
     await assertNoActiveBinding(client,{worldId,entityId});
     const versionResult=await client.query(
@@ -112,6 +119,7 @@ export async function revokeKnowledgeBallPrincipalBinding(pool, input) {
   const entityId=requiredString(input.entityId,'entityId');
   const reason=requiredString(input.reason,'reason');
   return withTransaction(pool,async client=>{
+    await lockBindingAggregate(client,{worldId,entityId});
     await authorizeBindingActor(client,{worldId,actorEntityId,entityId});
     const active=await client.query(
       "SELECT binding_id,binding_version FROM core.knowledge_ball_identity_bindings WHERE world_id=$1 AND entity_id=$2 AND provider='knowledge-ball' AND status='ACTIVE' FOR UPDATE",
