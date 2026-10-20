@@ -6,7 +6,7 @@ The current design baseline is **V3 (2026-09-15)** and the protocol baseline is 
 
 ## Executable status
 
-**V3 P0/P1 through P1.4.1 and P3-A are merged and verified. P3-B M02 continuous-runtime control-plane implementation head is VERIFIED; the documentation-only final PR head must still pass the complete PostgreSQL 16 CI before PR acceptance is closed.**
+**V3 P0/P1 through P1.4.1, P3-A, and P3-B M02 runtime hardening are merged and verified. NH-001 PR #17 was merged on 2026-10-20 as `4d3986fc507cceb803b7b6670271e53ad9cd20e9`; its final-head Task Acceptance passed and the P0-P1 CI run on the merge commit passed. This verifies the bounded M02 control-plane slice, not the complete P3 autonomous cognition flow.**
 
 The verified foundation contains M01 Entity/Action/Event primitives, the minimum M05 Energy ledger plus authoritative resource quotes, the minimum M06 OpenAI-compatible execution/usage/settlement chain, and the P3-A M02 runtime kernel: Agent profiles, immutable model manifests, versioned routes, fenced Worker leases/checkpoints and persistent goals.
 
