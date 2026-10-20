@@ -24,9 +24,13 @@ export const LEGACY_MIGRATION_ALLOWLIST = Object.freeze([
   '012_p3b_runtime_control_authority.sql',
   '013_p3b_active_state_guard.sql',
   '013a_p3_runtime_pre_hardening_cleanup.sql',
+  '013b_p3_runtime_json_preflight.sql',
   '014_p3_runtime_review_hardening.sql',
   '015a_p3_runtime_json_authority.sql',
   '015b_p3_runtime_lifecycle_authority.sql',
+  '015c_p3_runtime_final_review_closure.sql',
+  '015d_p3_connector_rotation_constraint_cleanup.sql',
+  '015e_p3_runtime_schedule_authority.sql',
 ]);
 
 // This migration landed on main during NH-014's concurrent integration window before
