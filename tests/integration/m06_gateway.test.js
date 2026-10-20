@@ -119,7 +119,7 @@ test('confirmed provider failure with trustworthy usage still settles actual cos
 
 
 test('cloud connector dispatch uses the cloud adapter envelope and runtime credential',async()=>{
-  const secret='m06-cloud-test-secret'; process.env.M06_CLOUD_TEST_API_KEY=secret;
+  const secret='fixture-token'; process.env.M06_CLOUD_TEST_API_KEY=secret;
   const calls=[];
   const fetchImpl=async(url,options)=>{
     calls.push({url:String(url),options,body:JSON.parse(options.body)});
