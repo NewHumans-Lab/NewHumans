@@ -37,8 +37,8 @@ function requestFor(command) {
 }
 
 function successReference(response) {
-  return response.operation_ref
-    ?? response.result?.escrow_ref
+  return response.result?.escrow_ref
+    ?? response.operation_ref
     ?? response.result?.operation_ref
     ?? response.result?.settlement_ref
     ?? null;
