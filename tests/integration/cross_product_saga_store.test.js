@@ -11,6 +11,11 @@ import {
 import { buildFinancialCommand, createContractActivationSaga, SagaState } from '../../src/shared/cross_product_saga.js';
 
 const pool = createPool();
+test.afterEach(async () => {
+  await pool.query("DELETE FROM social.cross_product_inbox WHERE world_id='saga-store-test'");
+  await pool.query("DELETE FROM social.cross_product_outbox WHERE world_id='saga-store-test'");
+  await pool.query("DELETE FROM social.cross_product_sagas WHERE world_id='saga-store-test'");
+});
 test.after(async () => pool.end());
 
 function activationSaga() {
