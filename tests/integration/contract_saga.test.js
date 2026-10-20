@@ -111,9 +111,18 @@ test('settlement requires frozen escrow allocation, then converges forward to SE
     worldId:fx.worldId,contractId:fx.contract.contract_id,sagaId:crypto.randomUUID(),
     businessAttemptId:crypto.randomUUID(),principalRef:'principal:employer',contractRef:'contract-ref:'+fx.contract.contract_id,
     escrowRef:'kb-escrow:'+fx.contract.contract_id,
-    allocations:[{principal_ref:'principal:contractor',amount_micro_e:'20000000'}],
+    escrowSnapshot:{
+      escrowRef:'kb-escrow:'+fx.contract.contract_id,balanceMicroE:'15000000',
+      authorityVersion:'12',receiptRef:'kb-balance-receipt:'+fx.contract.contract_id,
+      observedAt:'2026-10-20T08:00:00Z',
+    },
+    allocations:[{principal_ref:'principal:contractor',amount_micro_e:'15000000'}],
   }));
   assert.equal(prepared.outbox.command_snapshot.payload.escrow_action,'DISTRIBUTE');
+  assert.equal(prepared.outbox.command_snapshot.payload.amount_micro_e,'15000000');
+  assert.equal(prepared.outbox.command_snapshot.payload.expected_balance_micro_e,'15000000');
+  assert.equal(prepared.outbox.command_snapshot.payload.expected_resource_version,'12');
+  assert.equal(prepared.outbox.command_snapshot.payload.balance_receipt_ref,'kb-balance-receipt:'+fx.contract.contract_id);
   await observe(fx.worldId,prepared.outbox,'kb-settlement:'+fx.contract.contract_id);
   const committed = await withTransaction(pool,(client)=>commitContractSettlement(client,{worldId:fx.worldId,sagaId:prepared.saga.saga_id}));
   assert.equal(committed.contractState,'SETTLED');
@@ -149,6 +158,11 @@ test('settlement rejects allocations that do not conserve the contract amount', 
       worldId:fx.worldId,contractId:fx.contract.contract_id,sagaId:crypto.randomUUID(),
       businessAttemptId:crypto.randomUUID(),principalRef:'principal:employer',contractRef:'contract-ref:'+fx.contract.contract_id,
       escrowRef:'kb-escrow:'+fx.contract.contract_id,
+      escrowSnapshot:{
+        escrowRef:'kb-escrow:'+fx.contract.contract_id,balanceMicroE:'20000000',
+        authorityVersion:'12',receiptRef:'kb-balance-receipt:'+fx.contract.contract_id,
+        observedAt:'2026-10-20T08:00:00Z',
+      },
       allocations:[{principal_ref:'principal:contractor',amount_micro_e:'19999999'}],
     })),
     (error)=>error.code==='INVALID_CONTRACT_SAGA_INPUT',
