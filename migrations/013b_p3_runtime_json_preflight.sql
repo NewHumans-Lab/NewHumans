@@ -30,7 +30,56 @@ BEGIN
       END LOOP;
     WHEN 'string' THEN
       scalar := node #>> '{}';
-      IF scalar ~* '^\s*bearer\s+[A-Za-z0-9._~+/=-]{8,}\s*$' THEN
+      IF scalar ~* '^\s*bearer\s+\S+\s*
+        RETURN true;
+      END IF;
+      IF scalar ~* '^\s*basic\s+[A-Za-z0-9+/]+={0,2}\s*$' THEN
+        basic_token := regexp_replace(scalar, '^\s*[Bb][Aa][Ss][Ii][Cc]\s+', '');
+        basic_token := regexp_replace(basic_token, '\s+$', '');
+        BEGIN
+          basic_decoded := convert_from(decode(basic_token, 'base64'), 'UTF8');
+          IF position(':' IN basic_decoded) > 0 THEN RETURN true; END IF;
+        EXCEPTION WHEN OTHERS THEN
+          NULL;
+        END;
+      END IF;
+    ELSE
+      NULL;
+  END CASE;
+  RETURN false;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM runtime.model_manifests
+     WHERE runtime.jsonb_contains_secret(sampling_settings)
+  ) THEN
+    RAISE EXCEPTION 'legacy runtime manifest contains secret-bearing sampling settings; owner review required before P3 hardening'
+      USING ERRCODE='23514';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM runtime.model_routes
+     WHERE route_policy IS NOT NULL
+       AND jsonb_typeof(route_policy) <> 'object'
+  ) THEN
+    RAISE EXCEPTION 'legacy runtime route policy is not a JSON object; owner review required before P3 hardening'
+      USING ERRCODE='23514';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM runtime.model_routes
+     WHERE runtime.jsonb_contains_secret(route_policy)
+  ) THEN
+    RAISE EXCEPTION 'legacy runtime route policy contains secret-bearing material; owner review required before P3 hardening'
+      USING ERRCODE='23514';
+  END IF;
+END $$;
+ THEN
         RETURN true;
       END IF;
       IF scalar ~* '^\s*basic\s+[A-Za-z0-9+/]+={0,2}\s*$' THEN
