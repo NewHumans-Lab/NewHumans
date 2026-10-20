@@ -124,6 +124,10 @@ test('settlement rejects allocations that do not conserve the contract amount', 
   const fx = await fixture();
   await activate(fx);
   await pool.query("UPDATE social.contracts SET status='SUBMITTED' WHERE world_id=$1 AND contract_id=$2",[fx.worldId,fx.contract.contract_id]);
+  await pool.query(
+    "INSERT INTO social.deliveries (world_id,contract_id,version,submission_no,submitted_by_entity_id,artifact_ref,idempotency_key,status) VALUES ($1,$2,1,1,$3,$4,$5,'ACCEPTED')",
+    [fx.worldId,fx.contract.contract_id,fx.contractor.entity_id,'artifact://accepted','delivery-'+crypto.randomUUID()],
+  );
   await assert.rejects(
     () => withTransaction(pool,(client)=>prepareContractSettlement(client,{
       worldId:fx.worldId,contractId:fx.contract.contract_id,sagaId:crypto.randomUUID(),
