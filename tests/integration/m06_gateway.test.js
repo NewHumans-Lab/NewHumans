@@ -18,7 +18,7 @@ async function reserveFor(agent,amount='1000000',key=crypto.randomUUID()){const 
 async function configure({baseUrl,billingMode='PLATFORM_PREPAID',supportsIdempotency=false,maxAttempts=1,timeoutMs=1000,credentialEnvKey=null,inputRate='1000000',outputRate='2000000'}={}){
   return withTransaction(pool,async(c)=>{
     const descriptor=await registerDescriptor(c,{worldId:world,actorEntityId:system.entity_id,descriptorKey:`model-${crypto.randomUUID()}`,modelReference:'test-model',maxInputTokens:4096,maxOutputTokens:256,timeoutMs,maxAttempts,supportsIdempotency,inputRateMicroEPerMillion:inputRate,outputRateMicroEPerMillion:outputRate});
-    const connector=await registerConnector(c,{worldId:world,actorEntityId:system.entity_id,descriptorId:descriptor.descriptor_id,connectorKind:'LOCAL_SELF_HOSTED',billingMode,baseUrl,credentialEnvKey});
+    const connector=await registerConnector(c,{worldId:world,actorEntityId:system.entity_id,descriptorId:descriptor.descriptor_id,connectorKind,billingMode,baseUrl,credentialEnvKey});
     return{descriptor,connector};
   });
 }
@@ -117,6 +117,24 @@ test('confirmed provider failure with trustworthy usage still settles actual cos
   }finally{await p.close();}
 });
 
+
+test('cloud connector dispatch uses the cloud adapter envelope and runtime credential',async()=>{
+  const secret='m06-cloud-test-secret'; process.env.M06_CLOUD_TEST_API_KEY=secret;
+  const calls=[];
+  const fetchImpl=async(url,options)=>{
+    calls.push({url:String(url),options,body:JSON.parse(options.body)});
+    return new Response(JSON.stringify({id:'cloud-request-1',choices:[{message:{content:'cloud ok'}}],usage:{prompt_tokens:6,completion_tokens:3,total_tokens:9}}),{status:200,headers:{'content-type':'application/json','x-request-id':'cloud-request-1'}});
+  };
+  try{
+    const {descriptor,connector}=await configure({baseUrl:'https://cloud.example.test/',connectorKind:'CLOUD',billingMode:'BYOK',credentialEnvKey:'M06_CLOUD_TEST_API_KEY'});
+    const agent=await entity('AGENT','cloud-byok'); await mintTo(agent,'110000000','cloud-byok-seed'); await activate(agent);
+    const out=await infer(pool,{worldId:world,actorEntityId:agent.entity_id,idempotencyKey:'cloud-byok',descriptorId:descriptor.descriptor_id,connectorId:connector.connector_id,activitySubjectId:agent.entity_id,payerEntityId:agent.entity_id,billingDate:today,messages:[{role:'user',content:'hello cloud'}],maxOutputTokens:32,maxChargeMicroE:'0'},{fetchImpl});
+    assert.equal(out.status,'SUCCEEDED'); assert.equal(out.output,'cloud ok'); assert.equal(out.externalBilling,true); assert.equal(calls.length,1);
+    assert.equal(new URL(calls[0].url).pathname,'/requests'); assert.equal(calls[0].body.model_reference,'test-model'); assert.equal(calls[0].body.payload.messages[0].content,'hello cloud');
+    assert.equal(calls[0].options.headers.authorization,'Bearer '+secret); assert.equal(calls[0].options.headers['x-newhumans-execution-id'],out.executionId);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM gateway.usage_receipts WHERE execution_id=$1',[out.executionId])).rows[0].n,1);
+  }finally{delete process.env.M06_CLOUD_TEST_API_KEY;}
+});
 test('cross-world descriptor reference is rejected before dispatch',async()=>{
   const p=await provider(async({res})=>success(res));
   try{
