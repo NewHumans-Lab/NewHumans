@@ -111,6 +111,16 @@ BEGIN
       END IF;
       RETURN NEW;
     END IF;
+    IF NEW.blocked_reason IN ('DAILY_FEE_UNFUNDED','NO_ACTIVITY_ENERGY') THEN
+      SELECT life_status,restriction_flags INTO life
+        FROM runtime.lifecycle_states
+       WHERE world_id=NEW.world_id AND activity_subject_id=NEW.subject_id;
+      IF life.life_status IS DISTINCT FROM 'DORMANT'
+         OR NOT (NEW.blocked_reason=ANY(COALESCE(life.restriction_flags,'{}'::text[]))) THEN
+        RAISE EXCEPTION 'unfunded autonomous block requires matching dormant runtime evidence' USING ERRCODE='23514';
+      END IF;
+      RETURN NEW;
+    END IF;
     IF NEW.blocked_reason IS DISTINCT FROM 'M03_CONTEXT_UNAVAILABLE' THEN
       RAISE EXCEPTION 'autonomous pre-claim BLOCKED requires canonical M03 dependency evidence' USING ERRCODE='23514';
     END IF;
