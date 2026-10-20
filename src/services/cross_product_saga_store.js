@@ -128,7 +128,7 @@ export async function recordSagaFinancialResult(client, { worldId, operationKey,
     return { duplicate: false, conflict: true, saga: { ...row, state: SagaState.RECONCILIATION_REQUIRED }, outbox: null };
   }
   const updated = await client.query(
-    'UPDATE social.cross_product_sagas SET state=$3,saga_snapshot=$4::jsonb,version=version+1,last_error_code=$5,last_error_at=CASE WHEN $5 IS NULL THEN last_error_at ELSE now() END,next_reconcile_at=NULL,updated_at=now() WHERE saga_id=$1 AND world_id=$2 AND version=$6 RETURNING *',
+    'UPDATE social.cross_product_sagas SET state=$3,saga_snapshot=$4::jsonb,version=version+1,last_error_code=$5::text,last_error_at=CASE WHEN $5::text IS NULL THEN last_error_at ELSE now() END,next_reconcile_at=NULL,updated_at=now() WHERE saga_id=$1 AND world_id=$2 AND version=$6 RETURNING *',
     [row.saga_id,worldId,next.state,JSON.stringify(next),normalized.error_code,row.version],
   );
   if (updated.rowCount !== 1) throw problem('SAGA_VERSION_CONFLICT','Saga version changed while recording result');
