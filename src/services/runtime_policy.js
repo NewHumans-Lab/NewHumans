@@ -86,6 +86,17 @@ async function databaseNowIso(client) {
   return new Date(row.current_time).toISOString();
 }
 
+async function releaseClaimantLease(client, { worldId, subjectId, workerId, leaseEpoch }) {
+  const released = (await client.query(
+    `UPDATE runtime.runtime_leases SET released_at=now()
+      WHERE world_id=$1 AND activity_subject_id=$2 AND worker_id=$3 AND lease_epoch=$4
+        AND released_at IS NULL AND expires_at > now()
+      RETURNING lease_epoch`,
+    [worldId, subjectId, workerId, String(leaseEpoch)],
+  )).rows[0];
+  if (!released) throw problem('STALE_RUNTIME_LEASE', 'claimant lease could not be safely released during unfunded reconciliation', 409);
+}
+
 export async function getRuntimeEligibility(client, input) {
   const base = await getExecutionEligibility(client, input);
   const policyFlags = base.restriction_flags.filter((flag) => POLICY_BLOCKING_FLAGS.has(flag));
@@ -181,14 +192,36 @@ export async function claimAutonomousScheduledAction(client, input) {
   // reconciliation and the database claim guard; caller-supplied `now` cannot
   // move the Energy billing day backward or forward.
   const authoritativeNow = await databaseNowIso(client);
-  await reconcileActiveRuntime(client, {
+  const claimantLease = {
+    workerId: worker(input.workerId),
+    leaseEpoch: positiveVersion(input.leaseEpoch, 'leaseEpoch'),
+  };
+  const reconciliation = await reconcileActiveRuntime(client, {
     worldId: input.worldId,
     agentEntityId: row.subject_id,
     billingDate: authoritativeNow.slice(0, 10),
     actorEntityId: input.actorEntityId,
     actionId: input.actionId,
+    claimantLease,
   });
-  return claimScheduledAction(client, { ...input, now: authoritativeNow });
+  if (reconciliation.changed) {
+    const blocked = (await client.query(
+      `UPDATE runtime.scheduled_actions
+          SET status='BLOCKED',blocked_reason=$3,claimed_by_worker=$4,claimed_lease_epoch=$5,
+              claimed_at=now(),completed_at=now(),updated_at=now()
+        WHERE world_id=$1 AND scheduled_action_id=$2 AND status='SCHEDULED'
+        RETURNING *`,
+      [input.worldId, input.scheduledActionId, reconciliation.reason, claimantLease.workerId, claimantLease.leaseEpoch],
+    )).rows[0];
+    await releaseClaimantLease(client, { worldId: input.worldId, subjectId: row.subject_id, ...claimantLease });
+    if (input.actionId) await appendEvent(client, {
+      worldId: input.worldId, aggregateType: 'RUNTIME_AGENT', aggregateId: row.subject_id,
+      eventType: 'SCHEDULED_AUTONOMOUS_BLOCKED', actorEntityId: input.actorEntityId, actionId: input.actionId,
+      payload: { scheduledActionId: input.scheduledActionId, reason: reconciliation.reason, stateVersion: reconciliation.lifecycle.state_version },
+    });
+    return { ...blocked, result: 'BLOCKED', reason: reconciliation.reason, lifecycle: reconciliation.lifecycle };
+  }
+  return claimScheduledAction(client, { ...input, ...claimantLease, now: authoritativeNow });
 }
 
 export async function recoverAutonomousScheduledClaim(client, {
@@ -219,13 +252,30 @@ export async function recoverAutonomousScheduledClaim(client, {
   }
 
   const authoritativeNow = await databaseNowIso(client);
-  await reconcileActiveRuntime(client, {
+  const reconciliation = await reconcileActiveRuntime(client, {
     worldId,
     agentEntityId: row.subject_id,
     billingDate: authoritativeNow.slice(0, 10),
     actorEntityId,
     actionId,
+    claimantLease: { workerId, leaseEpoch: epoch },
   });
+  if (reconciliation.changed) {
+    const blocked = (await client.query(
+      `UPDATE runtime.scheduled_actions
+          SET status='BLOCKED',blocked_reason=$3,completed_at=now(),updated_at=now()
+        WHERE world_id=$1 AND scheduled_action_id=$2 AND status='CLAIMED'
+        RETURNING *`,
+      [worldId, scheduledActionId, reconciliation.reason],
+    )).rows[0];
+    await releaseClaimantLease(client, { worldId, subjectId: row.subject_id, workerId, leaseEpoch: epoch });
+    if (actionId) await appendEvent(client, {
+      worldId, aggregateType: 'RUNTIME_AGENT', aggregateId: row.subject_id,
+      eventType: 'SCHEDULED_CLAIM_BLOCKED', actorEntityId: actor.entity_id, actionId,
+      payload: { scheduledActionId, reason: reconciliation.reason, stateVersion: reconciliation.lifecycle.state_version },
+    });
+    return { ...blocked, state_version: reconciliation.lifecycle.state_version, recovery: true, result: 'BLOCKED', reason: reconciliation.reason };
+  }
   const eligibility = await getRuntimeEligibility(client, {
     worldId,
     agentEntityId: row.subject_id,
