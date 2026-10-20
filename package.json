@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node scripts/start.js",
     "migrate": "node scripts/migrate.js",
@@ -12,7 +14,8 @@
     "test:integration": "node scripts/test-db-harness.js --shards=4",
     "test:integration:serial": "node scripts/test-db-harness.js --shards=1",
     "test:integration:verify": "node scripts/test-db-harness.js --shards=4 --verify-serial",
-    "test": "npm run check && npm run test:unit && npm run test:integration:verify"
+    "test": "npm run check && npm run test:unit && npm run test:integration:verify",
+    "start:saga-worker": "node scripts/start-saga-worker.js"
   },
   "dependencies": {
     "ajv": "^8.17.1",
