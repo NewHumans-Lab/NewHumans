@@ -20,6 +20,7 @@ function sleep(ms, signal) {
     };
     const timer = setTimeout(finish, ms);
     signal?.addEventListener('abort', finish, { once: true });
+    if (signal?.aborted) finish();
   });
 }
 
