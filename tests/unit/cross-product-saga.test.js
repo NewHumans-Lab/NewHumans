@@ -50,6 +50,10 @@ function settlementSaga(overrides = {}) {
         contract_ref: 'contract:contract-1',
         amount_micro_e: '20000000',
         escrow_ref: 'escrow-1',
+        expected_balance_micro_e: '20000000',
+        expected_resource_version: '12',
+        balance_receipt_ref: 'receipt:balance:1',
+        balance_observed_at: '2026-10-20T08:00:00Z',
         allocations: [
           { principal_ref: 'principal:contractor', amount_micro_e: '18000000' },
           { principal_ref: 'principal:employer', amount_micro_e: '2000000' },
