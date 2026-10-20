@@ -119,7 +119,7 @@ test('escrow BALANCE snapshots are authoritative reads and DISTRIBUTE must conse
   distribute.payload = {
     escrow_action: 'DISTRIBUTE', contract_ref: 'contract:1', escrow_ref: 'escrow:1',
     amount_micro_e: '15000000', expected_balance_micro_e: '15000000',
-    expected_resource_version: '12', balance_receipt_ref: 'receipt:balance:1',
+    expected_resource_version: '12', balance_receipt_ref: 'receipt:balance:1', balance_observed_at: '2026-10-20T08:00:00Z',
     allocations: [{ principal_ref: 'principal:contractor', amount_micro_e: '15000000' }],
   };
   assert.equal(assertEconomyPortRequest('escrow', distribute), distribute);
