@@ -59,14 +59,14 @@ export async function prepareSagaIntent(client, saga) {
 }
 
 /** At-least-once outbox claim with expired-lease recovery and SKIP LOCKED. */
-export async function claimSagaOutbox(pool, { workerId, leaseMs = 30_000 } = {}) {
+export async function claimSagaOutbox(pool, { workerId, leaseMs = 30_000, worldId } = {}) {
   requireText(workerId, 'workerId');
   if (!Number.isInteger(leaseMs) || leaseMs < 1000 || leaseMs > 300_000) throw problem('INVALID_SAGA_INPUT', 'leaseMs must be 1000..300000');
   return withTransaction(pool, async (client) => {
     const result = await client.query(
-      "WITH candidate AS (SELECT outbox_id FROM social.cross_product_outbox WHERE (status IN ('PENDING','RETRY_WAIT') AND next_attempt_at <= now()) OR (status='LEASED' AND lease_until < now()) ORDER BY next_attempt_at,created_at FOR UPDATE SKIP LOCKED LIMIT 1) " +
+      "WITH candidate AS (SELECT outbox_id FROM social.cross_product_outbox WHERE ($3::text IS NULL OR world_id=$3) AND ((status IN ('PENDING','RETRY_WAIT') AND next_attempt_at <= now() OR status='LEASED' AND lease_until < now())) ORDER BY next_attempt_at,created_at FOR UPDATE SKIP LOCKED LIMIT 1) " +
       "UPDATE social.cross_product_outbox o SET status='LEASED',attempts=o.attempts+1,lease_owner=$1,lease_until=now()+($2::integer * interval '1 millisecond'),updated_at=now() FROM candidate WHERE o.outbox_id=candidate.outbox_id RETURNING o.*",
-      [workerId,leaseMs],
+      [workerId,leaseMs,worldId ?? null],
     );
     return result.rows[0] ?? null;
   });
