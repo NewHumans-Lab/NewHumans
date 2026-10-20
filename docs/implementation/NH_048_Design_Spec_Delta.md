@@ -88,11 +88,10 @@ This delta report does **not** claim that:
 - a live cloud or local model provider has been exercised;
 - the development CredentialVault is safe for production;
 - the sandbox contract provides OS-level isolation;
-- PR #17's final runtime gate is closed;
+- the complete P3 autonomous cognition flow is implemented;
 - M03 or autonomous cognition is implemented despite the current deferral;
 - all M04 data slices constitute the completed collaboration product;
 - the React bootstrap constitutes the complete UI/3D world;
-- the merge-commit P0-P1 CI and final-head Task Acceptance passed for NH-001; this does not establish a complete product release.
 
 ## 7. Acceptance
 
