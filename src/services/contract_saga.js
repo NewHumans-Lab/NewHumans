@@ -89,6 +89,27 @@ export async function prepareContractSettlement(client, input) {
   if (!contract.escrow_external_ref || contract.escrow_external_ref !== input.escrowRef) {
     throw problem('CONTRACT_ESCROW_REFERENCE_MISMATCH', 'settlement escrow reference must match the immutable contract reference');
   }
+
+  // A contract status alone is not an acceptance or adjudication decision.
+  // Require durable, version-bound evidence before creating any financial Outbox command.
+  if (contract.status === 'SUBMITTED') {
+    const accepted = await client.query(
+      "SELECT 1 FROM social.deliveries WHERE world_id=$1 AND contract_id=$2 AND version=$3 AND status='ACCEPTED' LIMIT 1",
+      [contract.world_id, contract.contract_id, contract.current_version],
+    );
+    if (accepted.rowCount !== 1) {
+      throw problem('CONTRACT_ACCEPTANCE_DECISION_REQUIRED', 'settlement requires an accepted delivery for the current contract version');
+    }
+  } else {
+    const resolved = await client.query(
+      "SELECT 1 FROM social.disputes WHERE world_id=$1 AND contract_id=$2 AND version=$3 AND status='RESOLVED' AND resolution IS NOT NULL AND resolved_by_entity_id IS NOT NULL LIMIT 1",
+      [contract.world_id, contract.contract_id, contract.current_version],
+    );
+    if (resolved.rowCount !== 1) {
+      throw problem('CONTRACT_DISPUTE_RESOLUTION_REQUIRED', 'disputed settlement requires a persisted resolution for the current contract version');
+    }
+  }
+
   const amountMicroE = String(contract.price_micro_e);
   assertAllocations(input.allocations, amountMicroE);
   const saga = createContractSettlementSaga({
