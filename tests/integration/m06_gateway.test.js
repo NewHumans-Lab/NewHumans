@@ -126,12 +126,12 @@ test('cloud connector dispatch uses the cloud adapter envelope and runtime crede
     return new Response(JSON.stringify({id:'cloud-request-1',choices:[{message:{content:'cloud ok'}}],usage:{prompt_tokens:6,completion_tokens:3,total_tokens:9}}),{status:200,headers:{'content-type':'application/json','x-request-id':'cloud-request-1'}});
   };
   try{
-    const {descriptor,connector}=await configure({baseUrl:'https://cloud.example.test/',connectorKind:'CLOUD',billingMode:'BYOK',credentialEnvKey:'M06_CLOUD_TEST_API_KEY'});
+    const {descriptor,connector}=await configure({baseUrl:'https://cloud.example.test/',connectorKind:'CLOUD',billingMode:'BYOK',supportsIdempotency:true,maxAttempts:2,credentialEnvKey:'M06_CLOUD_TEST_API_KEY'});
     const agent=await entity('AGENT','cloud-byok'); await mintTo(agent,'110000000','cloud-byok-seed'); await activate(agent);
     const out=await infer(pool,{worldId:world,actorEntityId:agent.entity_id,idempotencyKey:'cloud-byok',descriptorId:descriptor.descriptor_id,connectorId:connector.connector_id,activitySubjectId:agent.entity_id,payerEntityId:agent.entity_id,billingDate:today,messages:[{role:'user',content:'hello cloud'}],maxOutputTokens:32,maxChargeMicroE:'0'},{fetchImpl});
     assert.equal(out.status,'SUCCEEDED'); assert.equal(out.output,'cloud ok'); assert.equal(out.externalBilling,true); assert.equal(calls.length,1);
     assert.equal(new URL(calls[0].url).pathname,'/requests'); assert.equal(calls[0].body.model_reference,'test-model'); assert.equal(calls[0].body.payload.messages[0].content,'hello cloud');
-    assert.equal(calls[0].options.headers.authorization,'Bearer '+secret); assert.equal(calls[0].options.headers['x-newhumans-execution-id'],out.executionId);
+    assert.equal(calls[0].options.headers.authorization,'Bearer '+secret); assert.equal(calls[0].options.headers['x-newhumans-execution-id'],out.executionId); assert.ok(calls[0].options.headers['idempotency-key']);
     assert.equal((await pool.query('SELECT count(*)::int n FROM gateway.usage_receipts WHERE execution_id=$1',[out.executionId])).rows[0].n,1);
   }finally{delete process.env.M06_CLOUD_TEST_API_KEY;}
 });
