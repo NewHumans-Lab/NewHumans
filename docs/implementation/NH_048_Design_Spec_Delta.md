@@ -1,7 +1,7 @@
 # NH-048 Design Specification Delta
 
 Status: **AUDIT BASELINE RECORDED; SPECIFICATION IS NOT A CLAIM OF PRODUCT COMPLETION**  
-Code baseline: `main@2dcba7d6b4e35bb2456f3ab3404b080a1b6d5388` (2026-10-09)  
+Code baseline: `main@4d3986fc507cceb803b7b6670271e53ad9cd20e9` (2026-10-20)  
 Design baseline: V3 / protocol `nh.v3.0`, with `docs/CURRENT_DEVELOPMENT_SEQUENCE.md` as the active owner-directed sequencing override.  
 Scope: Compare the normative NewHumans design with implementation evidence on main and identify gaps that still require implementation, owner decisions or external verification. This is additive documentation; Knowledge Ball internals are out of scope.
 
@@ -15,7 +15,7 @@ Scope: Compare the normative NewHumans design with implementation evidence on ma
 - **UNVERIFIED IN REAL ENVIRONMENT** — only code contracts, mocks or local test evidence exist; no live endpoint/production deployment has been proven.
 - **NOT IMPLEMENTED IN THIS BASELINE** — implementation evidence was not found in this baseline; this does not rule out external work outside this repository.
 
-A schema or passing focused test is not evidence that all upstream, downstream and UI steps exist. Historical task CI and current-main CI are also distinct: the connector returned no individual status entries for the baseline main SHA, so no fresh all-green main run is asserted here.
+A schema or passing focused test is not evidence that all upstream, downstream and UI steps exist. For this refreshed baseline, NH-001 PR #17 is merged at `4d3986fc507cceb803b7b6670271e53ad9cd20e9`; its final-head Task Acceptance passed and the P0-P1 CI run on the merge commit passed. These results are bounded evidence, not proof of full product completion.
 
 ## 2. Source-of-truth rules
 
@@ -33,7 +33,7 @@ A schema or passing focused test is not evidence that all upstream, downstream a
 | M05 journal accounting, Energy precision, reservations/usage settlement and billing evidence | M05 service/schema and PRs #3, #6, #9, #12; regression tests `p1_4_billing_immutability.test.js`, `p1_4_contract_closure.test.js`. | IMPLEMENTED CORE SLICE | This is the NewHumans-local legacy accounting path. NH-012 freezes it as migration debt; it must not remain a second writable authority once the Knowledge Ball cross-product boundary is in production. |
 | Identity boundary and one writable Economy/Memory/Knowledge authority | NH-002 ADR (#24); NH-005 EconomyPort (#52); NH-006 MemoryPort (#62); NH-007 KnowledgePort (#61); NH-008 error model (#18); NH-009 retry contract (#66); NH-010 readiness (#25); NH-013 static authority guard (#63). | CONTRACTS / AUTHORITY GUARDS IMPLEMENTED; REMOTE PROVIDER NOT PROVEN | Boundary violations are guarded in NewHumans, but these files do not themselves prove that a production Knowledge Ball endpoint is connected and authoritative at runtime. |
 | Cross-product contract activation, escrow and settlement | NH-011 Saga protocol (#65), `src/shared/cross_product_saga.js`, contract-level tests and documentation. | PROTOCOL / REFERENCE STATE MACHINE ONLY | NH-011 explicitly excludes full durable Saga persistence tables and transport wiring. Do not claim operational cross-database escrow or settlement until a dedicated persistence/dispatcher/callback/reconciliation task passes. XA/2PC or dual rollback is not the design. |
-| M02 Agent profile, lifecycle, model manifests/routes, goals, leases and checkpoints | `docs/implementation/P3_A_M02_Runtime_Kernel.md`; `docs/implementation/P3_B_Continuous_Runtime_Control.md`; P3-A/P3-B integration test files; PR #14/#16 and current PR #17. | IMPLEMENTED BASELINE; PR #17 BLOCKED ON FINAL ACCEPTANCE | PR #17 remains open in this audit. Its stated gate requires rebase onto latest main, successful PostgreSQL 16 migrations, replacement audit, `npm run check`, full `npm test`, no substantive unresolved review issue, merge and post-merge SHA verification. Do not treat its pending merge SHA as accepted. |
+| M02 Agent profile, lifecycle, model manifests/routes, goals, leases and checkpoints | `docs/implementation/P3_A_M02_Runtime_Kernel.md`; `docs/implementation/P3_B_Continuous_Runtime_Control.md`; P3-A/P3-B integration test files; merged PR #14/#16/#17. | MERGED / VERIFIED (bounded M02 runtime-control implementation) | NH-001 PR #17 merged as `4d3986fc507cceb803b7b6670271e53ad9cd20e9`; final-head Task Acceptance and P0-P1 CI on the merge commit passed. Full P3 remains incomplete until the authoritative M03 context provider is adopted and the complete chain is integrated. |
 | M03 Knowledge, durable memory, Personal Overlay, evidence, challenges, and autonomous-turn context | `docs/modules/03_Knowledge_Ball.md`; NH-006/NH-007 boundary contracts; the active owner-directed sequence. | OWNER-DEFERRED | The product architecture still includes M03, but implementation/adoption is undecided. Keep `M03_CONTEXT_UNAVAILABLE` fail-closed. No temporary cognition service, local shadow memory, or substitute Knowledge Ball is permitted by current direction. |
 | M04 Directory and Messaging | NH-021 PR #37; NH-022 PR #46; NH-028/029 schema work; `m04_directory_data.test.js`, `m04_messaging_data.test.js`. | IMPLEMENTED DATA SLICES | Persistence invariants and schemas are implemented, but their existence alone does not prove a complete public API/UI workflow or full M04 product surface. |
 | M04 Relationships | NH-023 PR #53; `migrations/0523_m04_relationship_data.sql`, `src/services/social_relationships.js`, `m04_relationships.test.js`. | IMPLEMENTED DATA SLICE | Mutual facts require two-party proposal/confirmation evidence, history is append-only and effective dates are modeled. The stale `CI: PENDING` text inside the merged PR body should not be used as the source of merge state; GitHub records the PR as merged at SHA `1e3cf0ea9436d9f8b76847ba26dd10ef9f794c59`. |
@@ -48,9 +48,9 @@ A schema or passing focused test is not evidence that all upstream, downstream a
 
 ## 4. Confirmed gaps and required next actions
 
-### P0 — Close the existing runtime acceptance gate
+### P0 — Preserve the runtime acceptance gate on future changes
 
-PR #17 (`NH-001`) is open and its own completion gate says final acceptance is still pending. Rebase it onto current main, run the documented gates on the final head, resolve all failures and reviews, merge only after green, then verify the exact merge SHA and post-merge main result. Do not merge the stale head just to clear a task number.
+NH-001 PR #17 is merged at `4d3986fc507cceb803b7b6670271e53ad9cd20e9`. Its final-head Task Acceptance passed, and the P0-P1 CI run on the merge commit passed. Future changes must preserve the full migration, replacement-audit, `npm run check`, and `npm test` gates; do not create a parallel runtime implementation.
 
 ### P1 — Build the actual cross-product execution path
 
@@ -88,11 +88,10 @@ This delta report does **not** claim that:
 - a live cloud or local model provider has been exercised;
 - the development CredentialVault is safe for production;
 - the sandbox contract provides OS-level isolation;
-- PR #17's final runtime gate is closed;
+- the complete P3 autonomous cognition flow is implemented;
 - M03 or autonomous cognition is implemented despite the current deferral;
 - all M04 data slices constitute the completed collaboration product;
 - the React bootstrap constitutes the complete UI/3D world;
-- a fresh green status was observed for current main at this audit time.
 
 ## 7. Acceptance
 
