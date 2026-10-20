@@ -328,9 +328,9 @@ export async function reconcileActiveRuntime(client, { worldId, agentEntityId, b
   }
   if (claimantLease) {
     const lease = (await client.query(
-      \`SELECT worker_id,lease_epoch,(released_at IS NULL AND expires_at > now()) active
+      `SELECT worker_id,lease_epoch,(released_at IS NULL AND expires_at > now()) active
          FROM runtime.runtime_leases
-        WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE\`,
+        WHERE world_id=$1 AND activity_subject_id=$2 FOR UPDATE`,
       [worldId, agentEntityId],
     )).rows[0];
     if (!lease || !lease.active || lease.worker_id !== claimantLease.workerId
