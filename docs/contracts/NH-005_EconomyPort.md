@@ -18,7 +18,7 @@ All cross-product identifiers are opaque references (`principal_ref`, `quote_ref
 
 Every request carries `contract_version`, `operation`, `request_id`, `idempotency_key`, `principal_ref`, optional `expected_version`, and an operation-specific `payload`. Every response echoes the contract version, operation and request id and returns an authoritative status, opaque `operation_ref`, optional monotonic `resource_version`, `result`, and `error`.
 
-All Energy amounts are decimal integer strings in **microE**. JSON floating-point amounts are invalid. Ledger postings may be signed; spend/reserve/settle/transfer/escrow request amounts are positive.
+All Energy amounts are decimal integer strings in **microE**. JSON floating-point amounts are invalid. Ledger postings may be signed; financial mutation amounts for spend/reserve/settle/transfer/escrow are positive. The escrow BALANCE action is read-only and carries no amount.
 
 ## Operation payloads
 
