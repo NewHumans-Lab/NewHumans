@@ -32,9 +32,7 @@ export async function runSagaWorkerTick(pool, {
   retryAfterMs = 5_000,
   maxAttempts = 5,
 } = {}) {
-  const reconciliation = typeof lookupOperationByIdempotencyKey === 'function'
-    ? await reconcileSagaOnce(pool, { workerId, lookupOperationByIdempotencyKey, leaseMs, retryAfterMs })
-    : { claimed: false, outcome: 'RECONCILIATION_NOT_CONFIGURED' };
+  const reconciliation = await reconcileSagaOnce(pool, { workerId, lookupOperationByIdempotencyKey, leaseMs, retryAfterMs });
   const dispatch = await dispatchSagaOutboxOnce(pool, {
     workerId, economyPort, leaseMs, maxAttempts, retryAfterMs,
   });
@@ -63,8 +61,8 @@ export async function runSagaWorkerLoop(pool, {
     error.code = 'INVALID_SAGA_WORKER_CONFIG';
     throw error;
   }
-  if (!economyPort || typeof economyPort.escrow !== 'function') {
-    const error = new Error('authoritative Knowledge Ball EconomyPort is required');
+  if (!economyPort || typeof economyPort.escrow !== 'function' || typeof lookupOperationByIdempotencyKey !== 'function') {
+    const error = new Error('authoritative Knowledge Ball EconomyPort and idempotency lookup are required');
     error.code = 'KB_ECONOMY_PORT_UNAVAILABLE';
     throw error;
   }
