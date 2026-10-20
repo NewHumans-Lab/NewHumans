@@ -3,6 +3,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { withTransaction } from '../db.js';
 import { appendEvent, hashPayload, resolveActor } from './core.js';
 import { releaseReservation, settleReservation } from './economy.js';
+import { createOpenAICompatibleLocalModelAdapter } from './providers/local_model_adapter.js';
 
 const ONE_MILLION = 1_000_000n;
 const RETRYABLE_HTTP = new Set([408, 429, 500, 502, 503, 504]);
@@ -431,22 +432,71 @@ export async function infer(pool, input, { fetchImpl = globalThis.fetch, now = (
       throw error;
     }
     attemptsDispatched += 1;
-    const headers = {'content-type':'application/json'};
-    if (secret) headers.authorization = `Bearer ${secret}`;
-    if (prepared.plan.supports_idempotency) headers['idempotency-key'] = attempt.providerIdempotencyKey;
     let response;
-    try {
-      response = await fetchImpl(endpoint,{method:'POST',headers,body:JSON.stringify(prepared.providerBody),redirect:'manual',signal:AbortSignal.timeout(Number(prepared.plan.timeout_ms))});
-    } catch (error) {
-      const code = error?.cause?.code;
-      const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
-      if (timedOut || !CONFIRMED_CONNECT_FAILURES.has(code)) return finalizeUnknown(pool,prepared,attempt,{code:'PROVIDER_OUTCOME_UNKNOWN',message:'provider request ended without a trustworthy execution outcome'});
-      if (attemptNo < allowedAttempts) { await markRetryableFailure(pool,prepared,attempt,null,code || 'CONNECT_FAILED'); await sleep(Math.min(100 * attemptNo,500)); continue; }
-      return finalizeFailure(pool,prepared,attempt,{code:'PROVIDER_CONNECT_FAILED',message:'provider connection failed before a response'});
+    let adapterPayload = null;
+    let adapterRequestId = null;
+    if (prepared.plan.connector_kind === 'LOCAL_SELF_HOSTED') {
+      const adapter = createOpenAICompatibleLocalModelAdapter({
+        baseUrl: prepared.plan.base_url,
+        timeoutMs: Number(prepared.plan.timeout_ms),
+        fetchImpl,
+      });
+      try {
+        const envelope = await adapter.send({
+          executionId: prepared.executionId,
+          attemptId: attempt.attemptId,
+          modelReference: prepared.plan.model_reference,
+          payload: { messages: prepared.messages, max_tokens: prepared.maxOutputTokens, ...(prepared.providerBody.temperature === undefined ? {} : { temperature: prepared.providerBody.temperature }) },
+          idempotencyKey: prepared.plan.supports_idempotency ? attempt.providerIdempotencyKey : null,
+          authorization: secret ? `Bearer ${secret}` : null,
+        });
+        adapterPayload = envelope.data;
+        adapterRequestId = envelope.providerRequestId;
+        response = {
+          ok: true,
+          status: envelope.httpStatus,
+          headers: { get: (name) => name.toLowerCase() === 'x-request-id' ? adapterRequestId : null },
+          json: async () => adapterPayload,
+        };
+      } catch (error) {
+        const connectCode = error?.cause?.cause?.code ?? error?.cause?.code;
+        if (CONFIRMED_CONNECT_FAILURES.has(connectCode)) {
+          if (attemptNo < allowedAttempts) {
+            await markRetryableFailure(pool,prepared,attempt,null,connectCode);
+            await sleep(Math.min(100 * attemptNo,500));
+            continue;
+          }
+          return finalizeFailure(pool,prepared,attempt,{code:'PROVIDER_CONNECT_FAILED',message:'provider connection failed before a response'});
+        }
+        if (error?.outcomeUnknown) {
+          return finalizeUnknown(pool,prepared,attempt,{code:error.code || 'PROVIDER_OUTCOME_UNKNOWN',message:'provider adapter could not establish a trustworthy execution outcome'});
+        }
+        const errorPayload = error?.responseBody && typeof error.responseBody === 'object' ? error.responseBody : { error: { code: error?.code || 'PROVIDER_ADAPTER_ERROR' } };
+        const retryAfter = Number.isFinite(error?.retryAfterMs) ? String(Math.ceil(error.retryAfterMs / 1000)) : null;
+        response = {
+          ok: false,
+          status: Number.isInteger(error?.httpStatus) ? error.httpStatus : 502,
+          headers: { get: (name) => name.toLowerCase() === 'x-request-id' ? error?.providerRequestId ?? null : name.toLowerCase() === 'retry-after' ? retryAfter : null },
+          json: async () => errorPayload,
+        };
+      }
+    } else {
+      const headers = {'content-type':'application/json'};
+      if (secret) headers.authorization = `Bearer ${secret}`;
+      if (prepared.plan.supports_idempotency) headers['idempotency-key'] = attempt.providerIdempotencyKey;
+      try {
+        response = await fetchImpl(endpoint,{method:'POST',headers,body:JSON.stringify(prepared.providerBody),redirect:'manual',signal:AbortSignal.timeout(Number(prepared.plan.timeout_ms))});
+      } catch (error) {
+        const code = error?.cause?.code;
+        const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
+        if (timedOut || !CONFIRMED_CONNECT_FAILURES.has(code)) return finalizeUnknown(pool,prepared,attempt,{code:'PROVIDER_OUTCOME_UNKNOWN',message:'provider request ended without a trustworthy execution outcome'});
+        if (attemptNo < allowedAttempts) { await markRetryableFailure(pool,prepared,attempt,null,code || 'CONNECT_FAILED'); await sleep(Math.min(100 * attemptNo,500)); continue; }
+        return finalizeFailure(pool,prepared,attempt,{code:'PROVIDER_CONNECT_FAILED',message:'provider connection failed before a response'});
+      }
     }
-    let payload = {};
-    try { payload = await response.json(); } catch {}
-    const providerRequestId = response.headers.get('x-request-id') ?? payload?.id ?? null;
+    let payload = adapterPayload ?? {};
+    if (!adapterPayload) { try { payload = await response.json(); } catch {} }
+    const providerRequestId = adapterRequestId ?? response.headers.get('x-request-id') ?? payload?.id ?? null;
     if (!response.ok) {
       let failureUsage = null;
       try { failureUsage = extractOpenAICompatibleUsage(payload); } catch {}
