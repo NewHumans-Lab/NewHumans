@@ -97,6 +97,7 @@ test('ambiguous transport failure blocks resend until authoritative lookup prove
   assert.equal(dispatch.outcome, 'RECONCILIATION_REQUIRED');
   assert.equal((await pool.query('SELECT state FROM social.cross_product_sagas WHERE saga_id=$1', [fx.saga.saga_id])).rows[0].state, SagaState.RECONCILIATION_REQUIRED);
 
+  await pool.query('UPDATE social.cross_product_sagas SET next_reconcile_at=now() WHERE saga_id=$1', [fx.saga.saga_id]);
   const resolved = await reconcileSagaOnce(pool, {
     workerId: 'reconciler-1',
     lookupOperationByIdempotencyKey: async ({ operationKey, payloadDigest }) => {
