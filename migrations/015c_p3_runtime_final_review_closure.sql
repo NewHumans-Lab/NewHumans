@@ -357,6 +357,28 @@ BEGIN
   IF target_version IS DISTINCT FROM latest_version THEN
     RAISE EXCEPTION 'current route pointer must reference the latest authoritative route version' USING ERRCODE='23514';
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM runtime.model_change_events e
+     WHERE e.world_id=NEW.world_id
+       AND e.agent_entity_id=NEW.agent_entity_id
+       AND e.from_route_id IS NOT DISTINCT FROM OLD.current_route_id
+       AND e.to_route_id=NEW.current_route_id
+       AND e.created_by=(SELECT created_by FROM runtime.model_routes
+                          WHERE world_id=NEW.world_id AND agent_entity_id=NEW.agent_entity_id
+                            AND route_id=NEW.current_route_id)
+  ) THEN
+    RAISE EXCEPTION 'current route pointer change requires matching model-change evidence' USING ERRCODE='23514';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM runtime.lifecycle_states s
+     WHERE s.world_id=NEW.world_id AND s.activity_subject_id=NEW.agent_entity_id
+       AND s.model_status='AVAILABLE'
+       AND (s.life_status<>'ACTIVE' OR s.execution_status IN ('IDLE','RUNNABLE'))
+  ) THEN
+    RAISE EXCEPTION 'current route pointer change requires consistent lifecycle evidence' USING ERRCODE='23514';
+  END IF;
   RETURN NEW;
 END $$;
 
