@@ -30,7 +30,7 @@ test('NH-005 exposes exactly the minimum EconomyPort surface', () => {
     'escrow',
     'ledger',
   ]);
-  assert.equal(ECONOMY_PORT_VERSION, 'nh.kb-economy-port.v1');
+  assert.equal(ECONOMY_PORT_VERSION, 'nh.kb-economy-port.v2');
 });
 
 test('every EconomyPort operation has normal, duplicate, timeout, UNKNOWN, insufficient-balance and version-conflict vectors', () => {
@@ -99,6 +99,41 @@ test('KB Economy adapter is mandatory; there is no local ledger fallback', async
   const request = ECONOMY_PORT_EXAMPLES.balance.normal.request;
   const response = await port.balance(request);
   assert.deepEqual(response, ECONOMY_PORT_EXAMPLES.balance.normal.response);
+});
+
+test('escrow BALANCE snapshots are authoritative reads and DISTRIBUTE must conserve the frozen balance', () => {
+  const balanceRequest = structuredClone(ECONOMY_PORT_EXAMPLES.escrow.normal.request);
+  balanceRequest.payload = { escrow_action: 'BALANCE', contract_ref: 'contract:1', escrow_ref: 'escrow:1' };
+  assert.equal(assertEconomyPortRequest('escrow', balanceRequest), balanceRequest);
+
+  const balanceResponse = {
+    contract_version: ECONOMY_PORT_VERSION, operation: 'escrow', request_id: balanceRequest.request_id,
+    status: 'SUCCEEDED', operation_ref: 'op:escrow:balance:1', resource_version: '12',
+    result: { escrow_action: 'BALANCE', escrow_ref: 'escrow:1', balance_micro_e: '15000000',
+      receipt_ref: 'receipt:balance:1', observed_at: '2026-10-20T08:00:00Z' },
+    error: null,
+  };
+  assert.equal(assertEconomyPortResponse('escrow', balanceResponse), balanceResponse);
+
+  const distribute = structuredClone(ECONOMY_PORT_EXAMPLES.escrow.normal.request);
+  distribute.payload = {
+    escrow_action: 'DISTRIBUTE', contract_ref: 'contract:1', escrow_ref: 'escrow:1',
+    amount_micro_e: '15000000', expected_balance_micro_e: '15000000',
+    expected_resource_version: '12', balance_receipt_ref: 'receipt:balance:1',
+    allocations: [{ principal_ref: 'principal:contractor', amount_micro_e: '15000000' }],
+  };
+  assert.equal(assertEconomyPortRequest('escrow', distribute), distribute);
+  distribute.payload.allocations[0].amount_micro_e = '14999999';
+  assert.throws(() => assertEconomyPortRequest('escrow', distribute), error => error.code === 'ESCROW_ALLOCATION_MISMATCH');
+
+  const distributeResponse = {
+    contract_version: ECONOMY_PORT_VERSION, operation: 'escrow', request_id: distribute.request_id,
+    status: 'SUCCEEDED', operation_ref: 'op:escrow:distribute:1', resource_version: '13',
+    result: { escrow_action: 'DISTRIBUTE', escrow_ref: 'escrow:1', settlement_ref: 'settlement:1',
+      receipt_ref: 'receipt:settlement:1', distributed_micro_e: '15000000', escrow_balance_after_micro_e: '0' },
+    error: null,
+  };
+  assert.equal(assertEconomyPortResponse('escrow', distributeResponse), distributeResponse);
 });
 
 test('the port uses opaque references only and does not expose KB table or wallet-row identifiers', () => {
