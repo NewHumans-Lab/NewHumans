@@ -2,7 +2,7 @@
 
 Status: implementation candidate; merge only after required CI gates pass.
 
-Validation status is tracked by the pull request's current GitHub Actions run.
+Validation status is tracked by the pull request's current GitHub Actions run; settlement remains unavailable when decision evidence is absent.
 
 ## Change
 
