@@ -8,6 +8,7 @@ A contract's negotiated price is not necessarily the balance remaining in escrow
 
 ## Implemented
 
+- Existing Saga contract fixtures were migrated to the v2 balance snapshot precondition so the test suite does not rely on legacy settlement payloads.
 - NH-005 EconomyPort is versioned to nh.kb-economy-port.v2.
 - The escrow operation now supports a read-only BALANCE action returning escrow_ref, balance_micro_e, receipt_ref, observed_at, and authoritative resource_version.
 - DISTRIBUTE requires the escrow reference, expected balance, expected resource version, balance receipt reference, and allocations. Amount and allocation total must equal the expected balance.
