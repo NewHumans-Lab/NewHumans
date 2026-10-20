@@ -36,11 +36,19 @@ function requestFor(command) {
   };
 }
 
-function successReference(response) {
+function successReference(response, command) {
+  if (command.payload?.escrow_action === 'DISTRIBUTE') {
+    return response.result?.settlement_ref
+      ?? response.result?.receipt_ref
+      ?? response.operation_ref
+      ?? response.result?.operation_ref
+      ?? null;
+  }
   return response.result?.escrow_ref
     ?? response.operation_ref
     ?? response.result?.operation_ref
     ?? response.result?.settlement_ref
+    ?? response.result?.receipt_ref
     ?? null;
 }
 
@@ -99,7 +107,7 @@ export async function dispatchSagaOutboxOnce(pool, {
   }
 
   if (response.status === 'SUCCEEDED' || response.status === 'DUPLICATE') {
-    const resultRef = successReference(response);
+    const resultRef = successReference(response, command);
     if (!resultRef) {
       await withTransaction(pool, (client) => recordSagaDispatchFailure(client, {
         outboxId: claimed.outbox_id, leaseOwner: workerId,
