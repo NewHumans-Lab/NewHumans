@@ -240,6 +240,27 @@ test('database rejects route pointer changes without version fencing or to stale
     ),
     /latest authoritative route version/i,
   );
+  const thirdGateway = await descriptorConnector('route-pointer-third');
+  const thirdManifest = await withTransaction(pool, (client) => registerModelManifest(client, {
+    worldId: world, agentEntityId: agent.entity_id, descriptorId: thirdGateway.descriptor.descriptor_id,
+    connectorId: thirdGateway.connector.connector_id, promptVersion: 'route-pointer-third', samplingSettings: {},
+    actorEntityId: system.entity_id,
+  }));
+  const thirdRoute = (await pool.query(
+    `INSERT INTO runtime.model_routes
+       (world_id,agent_entity_id,route_version,manifest_id,route_policy,reason,created_by)
+     SELECT $1,$2,COALESCE(MAX(route_version),0)+1,$3,'{}'::jsonb,'unrecorded direct route',$4
+       FROM runtime.model_routes WHERE world_id=$1 AND agent_entity_id=$2
+     RETURNING route_id`,
+    [world, agent.entity_id, thirdManifest.manifest_id, system.entity_id],
+  )).rows[0];
+  await assert.rejects(
+    () => pool.query(
+      `UPDATE runtime.agent_profiles SET current_route_id=$3,profile_version=profile_version+1 WHERE world_id=$1 AND agent_entity_id=$2`,
+      [world, agent.entity_id, thirdRoute.route_id],
+    ),
+    /matching model-change evidence/i,
+  );
   const current = (await pool.query(
     `SELECT current_route_id FROM runtime.agent_profiles WHERE world_id=$1 AND agent_entity_id=$2`,
     [world, agent.entity_id],
