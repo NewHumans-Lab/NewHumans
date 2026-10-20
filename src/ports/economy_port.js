@@ -158,6 +158,10 @@ function assertRequestPayload(operation, payload) {
       if (payload.escrow_action === 'DISTRIBUTE') {
         assertNonEmptyString(payload.escrow_ref, 'payload.escrow_ref');
         assertNonEmptyString(payload.balance_receipt_ref, 'payload.balance_receipt_ref');
+        assertNonEmptyString(payload.balance_observed_at, 'payload.balance_observed_at');
+        if (!Number.isFinite(Date.parse(payload.balance_observed_at))) {
+          throw contractError('INVALID_ECONOMY_PORT_REQUEST', 'payload.balance_observed_at must be a timestamp', { operation });
+        }
         assertMicroEString(payload.expected_balance_micro_e, { field: 'payload.expected_balance_micro_e', allowZero: false });
         assertVersion(payload.expected_resource_version, 'payload.expected_resource_version');
         if (payload.expected_resource_version === undefined) {
