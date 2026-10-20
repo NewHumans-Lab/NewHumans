@@ -34,7 +34,7 @@ function plainObject(value, field) {
 
 function assertNoSecretMaterial(value, field) {
   const forbiddenKey = /(^|[_-])(cookie|secret|password|credential)([_-]|$)|(^|[_-])(proxy[-_]authorization|authorization[-_]header|http[-_]authorization|set[-_]cookie|x[-_]api[-_]key|api[-_]key|access[-_]token|bearer[-_]token)([_-]|$)/i;
-  const forbiddenBearer = /^\s*bearer\s+[A-Za-z0-9._~+/=-]{8,}\s*$/i;
+  const forbiddenBearer = /^\s*bearer\s+\S+\s*$/i;
   const basicCredential = /^\s*basic\s+([A-Za-z0-9+/]+={0,2})\s*$/i;
   const scalarContainsCredential = (node) => {
     if (forbiddenBearer.test(node)) return true;
