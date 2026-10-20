@@ -45,7 +45,7 @@ function assertAllocations(allocations, amountMicroE) {
   for (const [index, item] of allocations.entries()) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw problem('INVALID_CONTRACT_SAGA_INPUT', 'allocation ' + index + ' must be an object', 400);
     nonEmpty(item.principal_ref, 'allocations[' + index + '].principal_ref');
-    if (typeof item.amount_micro_e !== 'string' || !/^(0|[1-9]\\d*)$/.test(item.amount_micro_e)) {
+    if (typeof item.amount_micro_e !== 'string' || !/^(0|[1-9]\d*)$/.test(item.amount_micro_e)) {
       throw problem('INVALID_CONTRACT_SAGA_INPUT', 'allocation amounts must be non-negative integer strings', 400);
     }
     total += BigInt(item.amount_micro_e);
