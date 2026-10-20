@@ -51,7 +51,7 @@ function validateEscrowSnapshot(snapshot, expectedEscrowRef) {
   if (snapshot.escrowRef !== expectedEscrowRef) {
     throw problem('CONTRACT_ESCROW_REFERENCE_MISMATCH', 'authoritative snapshot must refer to the contract escrow');
   }
-  if (!/^(0|[1-9]\\d*)$/.test(snapshot.balanceMicroE) || BigInt(snapshot.balanceMicroE) <= 0n) {
+  if (!/^(0|[1-9]\d*)$/.test(snapshot.balanceMicroE) || BigInt(snapshot.balanceMicroE) <= 0n) {
     throw problem('ESCROW_BALANCE_NOT_DISTRIBUTABLE', 'authoritative escrow balance must be a positive integer microE string');
   }
   if (!/^(0|[1-9]\\d*)$/.test(snapshot.authorityVersion)) {
