@@ -1,7 +1,7 @@
 # NH-047 Cross-Module Integration Readiness Matrix
 
 Status: **BASELINE AUDIT RECORDED; PRODUCT RELEASE NOT CLEARED**  
-Baseline: `main@2dcba7d6b4e35bb2456f3ab3404b080a1b6d5388` (2026-10-09)  
+Baseline: `main@4d3986fc507cceb803b7b6670271e53ad9cd20e9` (2026-10-20)  
 Scope: Evidence-based readiness and release gates across M01–M07 and the NewHumans ↔ Knowledge Ball boundary. This document does not implement a second provider, alter runtime semantics, or modify Knowledge Ball.
 
 ## 1. Status vocabulary
@@ -19,7 +19,7 @@ A green unit test or a merged data migration must not be promoted to a stronger 
 | Slice | Current evidence | Status | What is still required before claiming the complete product flow |
 | --- | --- | --- | --- |
 | M01 identity, world isolation, action/event core and the minimum ledger/usage vertical slice | P0/P1 implementation and hardening PRs; integration tests include `tests/integration/p0p1.test.js`, `p1_1_hardening.test.js`, `p1_4_contract_closure.test.js`, and `p1_4_billing_immutability.test.js`. | MERGED / HISTORICALLY VERIFIED | Preserve the full migration and `npm test` gate after changes. This does not establish production identity verification, which is explicitly not simulated by development bootstrap. |
-| M02 runtime kernel and continuous control plane | P3-A / P3-B implementation is present on main; `tests/integration/p3a_runtime.test.js`, `p3a_runtime_authority.test.js`, `p3b_runtime_authority.test.js`, and `p3b_runtime_control.test.js`. PR #17 is still open and says its final rebased head must pass the complete PostgreSQL 16 gate. | BLOCKED ON REQUIRED GATE | Rebase the existing runtime-hardening work onto current main, resolve every regression, pass migrations, replacement audit, `npm run check` and the complete `npm test` gate, write back the real merge SHA, then verify the post-merge main run. Do not create a parallel runtime implementation. |
+| M02 runtime kernel and continuous control plane | P3-A / P3-B implementation is present on main; `tests/integration/p3a_runtime.test.js`, `p3a_runtime_authority.test.js`, `p3b_runtime_authority.test.js`, and `p3b_runtime_control.test.js`. NH-001 PR #17 merged as `4d3986fc507cceb803b7b6670271e53ad9cd20e9`; its final-head Task Acceptance passed and the P0-P1 CI run on the merge commit passed. | MERGED / VERIFIED (bounded M02 control-plane slice) | Preserve the full PostgreSQL 16 migration, replacement audit, `npm run check`, and `npm test` gates for future changes. Full P3 cognition remains blocked by the deliberate M03 dependency boundary. |
 | M03 Knowledge Ball authority boundary | NH-002 ADR plus NH-005 EconomyPort, NH-006 MemoryPort, NH-007 KnowledgePort, NH-008 error model, NH-009 retry/idempotency, NH-010 readiness and NH-011 Saga protocol. | CONTRACT / DATA SLICE ONLY | A live Knowledge Ball endpoint, durable authority-side behavior, authentication and production connection have not been demonstrated by these NewHumans-side contracts alone. Keep any M03-dependent cognition fail-closed. |
 | Cross-product contract funding, escrow and settlement | NH-011 defines an executable reference protocol and explicit recovery semantics. Its own limitation states that full Saga persistence tables and transport wiring are outside the task. | CONTRACT ONLY | Implement a separately scoped persistence/dispatcher/callback/reconciliation slice before claiming that cross-product money movement is running end to end. Preserve stable business-attempt identity, query-before-replay and no shadow ledger. |
 | M04 Directory, Messaging and Relationships | Merged slices NH-021 (#37), NH-022 (#46), NH-023 (#53), and schemas including NH-028/029/030. Corresponding integration tests are in the M04 test files. | MERGED DATA SLICES / END-TO-END NOT PROVEN | A database slice being verified does not prove the public HTTP/UI workflow is wired across all M04 entities. Run the complete suite after composition changes and add scenario tests when API-level composition is implemented. |
@@ -50,8 +50,8 @@ A task that touches only documentation still must pass the repository-required P
 
 ## 5. Baseline caveats and follow-up
 
-- At the time this matrix was written, current main was `2dcba7d6b4e35bb2456f3ab3404b080a1b6d5388`; the latest combined-status endpoint returned no individual status entries for that SHA. This document therefore relies on task-level historical acceptance records where cited and does not fabricate a fresh all-green main CI result.
-- PR #17, NH-001 runtime hardening, remained open at this baseline; its description explicitly required a fresh latest-base green run before acceptance.
+- This matrix is refreshed against `main@4d3986fc507cceb803b7b6670271e53ad9cd20e9` on 2026-10-20. NH-001 PR #17 is merged and its final-head Task Acceptance passed; the P0-P1 CI run on the merge commit passed.
+- These results verify the bounded M02 runtime-hardening slice only. They do not establish a live model provider, a production Knowledge Ball connection, or a complete autonomous cognition path.
 - The original NH-047 task-card scope was not present in the repository or discoverable among its PRs/issues. This file records a conservative integration-readiness deliverable from the observable gaps; it does not claim to recover an unavailable prior task description.
 - Knowledge Ball internals are outside this task. No production provider, Knowledge Ball deployment, real credential, or product UI is altered by this document.
 
