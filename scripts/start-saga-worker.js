@@ -40,8 +40,8 @@ try {
     retryAfterMs: Number(process.env.NH_SAGA_RETRY_AFTER_MS || 5000),
     maxAttempts: Number(process.env.NH_SAGA_MAX_ATTEMPTS || 5),
     signal: controller.signal,
-    onTick: (result) => process.stdout.write(JSON.stringify({ event: 'saga_worker_tick', workerId, ...result }) + '\\n'),
-    onError: (error) => process.stderr.write(JSON.stringify({ event: 'saga_worker_error', workerId, ...error }) + '\\n'),
+    onTick: (result) => process.stdout.write(JSON.stringify({ event: 'saga_worker_tick', workerId, ...result }) + '\n'),
+    onError: (error) => process.stderr.write(JSON.stringify({ event: 'saga_worker_error', workerId, ...error }) + '\n'),
   });
 } finally {
   process.removeListener('SIGINT', stop);
