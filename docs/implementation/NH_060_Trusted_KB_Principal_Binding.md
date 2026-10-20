@@ -8,7 +8,7 @@ NH-002 assigns NewHumans/M01 ownership of Entity identity and requires an explic
 
 ## Implemented
 
-- Migration 0529 adds core.knowledge_ball_identity_bindings with immutable verification evidence, binding versions, ACTIVE/REVOKED states, world-scoped Entity references, one active binding per Entity, and one active Entity per canonical KB principal.
+- Migration 0529 adds core.entity_provider_bindings with immutable verification evidence, binding versions, ACTIVE/REVOKED states, world-scoped Entity references, one active binding per Entity, and one active Entity per canonical KB principal.
 - Binding creation requires an injected trusted identityPort.verifyBindingProof adapter. The persisted principal_ref is taken only from that adapter's verified result; client-supplied principal_ref is rejected.
 - External verification is performed outside a PostgreSQL transaction. The service rechecks M01-side authorization and uniqueness inside a second local transaction before writing.
 - Self-binding is permitted for an active Entity. Binding another Entity requires an active capability grant from that target Entity containing identity.bind_knowledge_ball.
