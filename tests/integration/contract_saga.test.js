@@ -120,6 +120,22 @@ test('settlement requires frozen escrow allocation, then converges forward to SE
   assert.equal((await pool.query('SELECT status FROM social.contracts WHERE contract_id=$1',[fx.contract.contract_id])).rows[0].status,'SETTLED');
 });
 
+test('settlement fails closed when SUBMITTED has no accepted delivery decision', async () => {
+  const fx = await fixture();
+  await activate(fx);
+  await pool.query("UPDATE social.contracts SET status='SUBMITTED' WHERE world_id=$1 AND contract_id=$2",[fx.worldId,fx.contract.contract_id]);
+  await assert.rejects(
+    () => withTransaction(pool,(client)=>prepareContractSettlement(client,{
+      worldId:fx.worldId,contractId:fx.contract.contract_id,sagaId:crypto.randomUUID(),
+      businessAttemptId:crypto.randomUUID(),principalRef:'principal:employer',contractRef:'contract-ref:'+fx.contract.contract_id,
+      escrowRef:'kb-escrow:'+fx.contract.contract_id,
+      allocations:[{principal_ref:'principal:contractor',amount_micro_e:'20000000'}],
+    })),
+    (error)=>error.code==='CONTRACT_ACCEPTANCE_DECISION_REQUIRED',
+  );
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM social.cross_product_outbox WHERE world_id=$1",[fx.worldId])).rows[0].n,1);
+});
+
 test('settlement rejects allocations that do not conserve the contract amount', async () => {
   const fx = await fixture();
   await activate(fx);
