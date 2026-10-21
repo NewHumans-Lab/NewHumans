@@ -1,0 +1,9 @@
+{
+  "task_id": "NH-062",
+  "head_ref": "feat/nh-062-m04-http-routes",
+  "allowed_paths": [
+    "src/http/server.js",
+    "tests/integration/http_server.test.js"
+  ],
+  "capabilities": []
+}
