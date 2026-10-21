@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPool, withTransaction } from '../../src/db.js';
 import { acceptContractVersion, proposeContract } from '../../src/services/m04_contracts.js';
-import { raiseContractDispute, reviewDelivery, submitDelivery } from '../../src/services/m04_contract_delivery.js';
+import { adjudicateContractDispute, raiseContractDispute, reviewDelivery, submitDelivery, verifyContractAdjudicator } from '../../src/services/m04_contract_delivery.js';
 
 const pool=createPool();
 test.beforeEach(async()=>{await pool.query('TRUNCATE core.entities RESTART IDENTITY CASCADE')});
@@ -97,4 +97,30 @@ test('either contract party may raise a version-bound dispute and the contract b
   assert.equal(result.contractStatus,'DISPUTED');
   assert.equal(result.dispute.status,'OPEN');
   assert.equal((await pool.query('SELECT status FROM social.deliveries WHERE delivery_id=$1',[delivery.delivery_id])).rows[0].status,'DISPUTED');
+});
+
+test('trusted adjudicator resolves a current-version dispute and duplicate resolution fails closed', async () => {
+  const fx = await fixture(), delivery = (await submit(fx)).delivery;
+  const opened = await withTransaction(pool, client => raiseContractDispute(client, { worldId: fx.worldId, contractId: fx.contractId, actorEntityId: fx.contractor.entity_id, expectedVersion: 1, deliveryId: delivery.delivery_id, reason: 'Needs independent review', evidence: { artifactRef: delivery.artifact_ref } }));
+  const base = { worldId: fx.worldId, contractId: fx.contractId, disputeId: opened.dispute.dispute_id, actorEntityId: fx.employer.entity_id, expectedVersion: 1 };
+  const authorization = await verifyContractAdjudicator({ verifyAdjudicator: async () => ({ authorized: true, adjudicatorEntityId: fx.employer.entity_id }) }, base);
+  const input = { ...base, outcome: 'UPHOLD_CLAIM', resolution: { rationale: 'Criteria not met' }, adjudicatorAuthorization: authorization };
+  const result = await withTransaction(pool, client => adjudicateContractDispute(client, input));
+  assert.equal(result.dispute.status, 'RESOLVED');
+  assert.equal(result.dispute.resolved_by_entity_id, fx.employer.entity_id);
+  assert.ok(result.dispute.resolved_at);
+  assert.deepEqual(result.dispute.resolution, { outcome: 'UPHOLD_CLAIM', details: { rationale: 'Criteria not met' } });
+  assert.equal(result.contractStatus, 'DISPUTED');
+  await assert.rejects(() => withTransaction(pool, client => adjudicateContractDispute(client, input)), e => e.code === 'DISPUTE_ALREADY_RESOLVED');
+});
+
+test('adjudication fails closed without verifier, with denied authority, or with empty resolution', async () => {
+  const fx = await fixture(), delivery = (await submit(fx)).delivery;
+  const opened = await withTransaction(pool, client => raiseContractDispute(client, { worldId: fx.worldId, contractId: fx.contractId, actorEntityId: fx.contractor.entity_id, expectedVersion: 1, deliveryId: delivery.delivery_id, reason: 'Needs review', evidence: {} }));
+  const base = { worldId: fx.worldId, contractId: fx.contractId, disputeId: opened.dispute.dispute_id, actorEntityId: fx.employer.entity_id, expectedVersion: 1, outcome: 'REJECT_CLAIM', resolution: { rationale: 'Insufficient evidence' } };
+  await assert.rejects(() => verifyContractAdjudicator(null, base), e => e.code === 'ADJUDICATOR_VERIFIER_UNAVAILABLE');
+  await assert.rejects(() => verifyContractAdjudicator({ verifyAdjudicator: async () => ({ authorized: false }) }, base), e => e.code === 'FORBIDDEN_ADJUDICATOR');
+  const authorization = await verifyContractAdjudicator({ verifyAdjudicator: async () => ({ authorized: true, adjudicatorEntityId: fx.employer.entity_id }) }, base);
+  await assert.rejects(() => withTransaction(pool, client => adjudicateContractDispute(client, { ...base, outcome: 'REJECT_CLAIM', resolution: {}, adjudicatorAuthorization: authorization })), e => e.code === 'RESOLUTION_REQUIRED');
+  assert.equal((await pool.query('SELECT status FROM social.disputes WHERE dispute_id=$1', [opened.dispute.dispute_id])).rows[0].status, 'OPEN');
 });
