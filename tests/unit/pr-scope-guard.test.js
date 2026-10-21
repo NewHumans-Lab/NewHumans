@@ -185,11 +185,17 @@ test('NH-065 registry bootstrap is branch-bound and its exact path list cannot b
   ]) {
     assert.throws(() => resolveScope({ ...base, declaredAllowedPaths: widened }), /must exactly match/);
   }
-  assert.throws(() => resolveScope({
+  const wrongBranch = resolveScope({
     ...base,
     headRef: 'feat/nh-065-other-branch',
     declaredAllowedPaths: [...REGISTRY_BOOTSTRAP_ALLOWED_PATHS],
-  }), /must exactly match/);
+  });
+  assert.deepEqual(findProtectedPathViolations(['.github/task-scopes/NH-062.json'], {
+    taskId: 'NH-065',
+    headRef: 'feat/nh-065-other-branch',
+    source: wrongBranch.source,
+    capabilities: wrongBranch.capabilities,
+  }).length, 1);
 });
 
 test('NH-065 bootstrap cannot authorize protected runtime paths outside its exact scope', () => {
