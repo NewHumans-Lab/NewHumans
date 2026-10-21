@@ -158,3 +158,29 @@ export async function raiseContractDispute(client, input) {
   await client.query("UPDATE social.contracts SET status='DISPUTED' WHERE world_id=$1 AND contract_id=$2",[worldId,contractId]);
   return {dispute:inserted.rows[0],contractStatus:'DISPUTED'};
 }
+
+export async function adjudicateContractDispute(client, input) {
+  const worldId = requiredString(input.worldId, 'worldId');
+  const contractId = requiredString(input.contractId, 'contractId');
+  const disputeId = requiredString(input.disputeId, 'disputeId');
+  const actorEntityId = requiredString(input.actorEntityId, 'actorEntityId');
+  const outcome = requiredString(input.outcome, 'outcome').toUpperCase();
+  if (!['UPHOLD_CLAIM', 'REJECT_CLAIM'].includes(outcome)) throw problem('INVALID_ADJUDICATION_OUTCOME', 'outcome must be UPHOLD_CLAIM or REJECT_CLAIM', 400);
+  const resolution = jsonObject(input.resolution, 'resolution', { required: true });
+  if (!Object.keys(resolution).length) throw problem('RESOLUTION_REQUIRED', 'resolution must contain a structured explanation', 400);
+  if (!input.adjudicatorPort || typeof input.adjudicatorPort.verifyAdjudicator !== 'function') throw problem('ADJUDICATOR_VERIFIER_UNAVAILABLE', 'trusted adjudicator verifier is required', 503);
+  const verified = await input.adjudicatorPort.verifyAdjudicator({ worldId, contractId, disputeId, expectedVersion: input.expectedVersion, actorEntityId });
+  if (!verified || verified.authorized !== true || typeof verified.adjudicatorEntityId !== 'string' || !verified.adjudicatorEntityId.trim()) throw problem('FORBIDDEN_ADJUDICATOR', 'trusted authority did not authorize this adjudicator', 403);
+  const contract = await lockContract(client, { worldId, contractId });
+  if (contract.status !== 'DISPUTED') throw problem('CONTRACT_NOT_DISPUTED', 'adjudication requires a DISPUTED contract', 409);
+  assertVersion(contract, input.expectedVersion);
+  const found = await client.query('SELECT * FROM social.disputes WHERE world_id=$1 AND contract_id=$2 AND dispute_id=$3 FOR UPDATE', [worldId, contractId, disputeId]);
+  if (found.rowCount !== 1) throw problem('DISPUTE_NOT_FOUND', 'dispute not found for this contract and world', 404);
+  const dispute = found.rows[0];
+  if (dispute.version !== contract.current_version) throw problem('STALE_VERSION', 'dispute is not bound to the current contract version', 409);
+  if (!['OPEN', 'UNDER_REVIEW'].includes(dispute.status)) throw problem('DISPUTE_ALREADY_RESOLVED', 'only OPEN or UNDER_REVIEW disputes may be resolved', 409);
+  const stored = { outcome, details: resolution };
+  const updated = await client.query("UPDATE social.disputes SET status='RESOLVED', resolution=$4::jsonb, resolved_by_entity_id=$5, resolved_at=now() WHERE world_id=$1 AND contract_id=$2 AND dispute_id=$3 AND status IN ('OPEN','UNDER_REVIEW') RETURNING *", [worldId, contractId, disputeId, JSON.stringify(stored), verified.adjudicatorEntityId]);
+  if (updated.rowCount !== 1) throw problem('DISPUTE_ALREADY_RESOLVED', 'dispute changed while adjudication was in progress', 409);
+  return { dispute: updated.rows[0], contractStatus: 'DISPUTED', outcome };
+}
