@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import {
   BOOTSTRAP_ALLOWED_PATHS,
+  REGISTRY_BOOTSTRAP_ALLOWED_PATHS,
   auditScope,
   findOutOfScopePaths,
   findProtectedPathViolations,
@@ -165,4 +166,56 @@ test('base-only commits added after branching are not charged to the task diff',
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /accepted NH-777: 1 changed path/);
+});
+
+test('NH-065 registry bootstrap is branch-bound and its exact path list cannot be widened', () => {
+  const base = {
+    taskId: 'NH-065',
+    headRef: 'feat/nh-065-scope-registry-bootstrap',
+    registryScope: null,
+  };
+  assert.deepEqual(resolveScope({
+    ...base,
+    declaredAllowedPaths: [...REGISTRY_BOOTSTRAP_ALLOWED_PATHS],
+  }).allowedPaths, [...REGISTRY_BOOTSTRAP_ALLOWED_PATHS]);
+  for (const widened of [
+    [...REGISTRY_BOOTSTRAP_ALLOWED_PATHS, 'src/http/server.js'],
+    [...REGISTRY_BOOTSTRAP_ALLOWED_PATHS, 'src/**'],
+    ['.github/task-scopes/**', 'scripts/check-pr-scope.js', 'tests/unit/pr-scope-guard.test.js'],
+  ]) {
+    assert.throws(() => resolveScope({ ...base, declaredAllowedPaths: widened }), /must exactly match/);
+  }
+  const wrongBranch = resolveScope({
+    ...base,
+    headRef: 'feat/nh-065-other-branch',
+    declaredAllowedPaths: [...REGISTRY_BOOTSTRAP_ALLOWED_PATHS],
+  });
+  assert.deepEqual(findProtectedPathViolations(['.github/task-scopes/NH-062.json'], {
+    taskId: 'NH-065',
+    headRef: 'feat/nh-065-other-branch',
+    source: wrongBranch.source,
+    capabilities: wrongBranch.capabilities,
+  }).length, 1);
+});
+
+test('NH-065 bootstrap cannot authorize protected runtime paths outside its exact scope', () => {
+  const violations = findProtectedPathViolations(['src/http/server.js'], {
+    taskId: 'NH-065',
+    headRef: 'feat/nh-065-scope-registry-bootstrap',
+    source: 'PR_BODY_FALLBACK',
+    capabilities: [],
+  });
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /shared runtime hotspot/);
+});
+
+test('NH-065 bootstrap identity cannot be reused on another task or branch', () => {
+  const violations = findProtectedPathViolations(['.github/task-scopes/NH-062.json'], {
+    taskId: 'NH-065',
+    headRef: 'feat/nh-065-other-branch',
+    source: 'PR_BODY_FALLBACK',
+    capabilities: [],
+  });
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /PR_SCOPE_CONTROL capability/);
 });
