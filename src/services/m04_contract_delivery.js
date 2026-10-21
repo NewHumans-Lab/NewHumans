@@ -159,6 +159,22 @@ export async function raiseContractDispute(client, input) {
   return {dispute:inserted.rows[0],contractStatus:'DISPUTED'};
 }
 
+const adjudicatorAuthorizations = new WeakMap();
+
+/** Call before opening the database transaction; returns a process-local authorization capability. */
+export async function verifyContractAdjudicator(adjudicatorPort, input) {
+  const worldId = requiredString(input.worldId, 'worldId');
+  const contractId = requiredString(input.contractId, 'contractId');
+  const disputeId = requiredString(input.disputeId, 'disputeId');
+  const actorEntityId = requiredString(input.actorEntityId, 'actorEntityId');
+  if (!adjudicatorPort || typeof adjudicatorPort.verifyAdjudicator !== 'function') throw problem('ADJUDICATOR_VERIFIER_UNAVAILABLE', 'trusted adjudicator verifier is required', 503);
+  const verified = await adjudicatorPort.verifyAdjudicator({ worldId, contractId, disputeId, expectedVersion: input.expectedVersion, actorEntityId });
+  if (!verified || verified.authorized !== true || typeof verified.adjudicatorEntityId !== 'string' || !verified.adjudicatorEntityId.trim()) throw problem('FORBIDDEN_ADJUDICATOR', 'trusted authority did not authorize this adjudicator', 403);
+  const capability = Object.freeze({});
+  adjudicatorAuthorizations.set(capability, { worldId, contractId, disputeId, actorEntityId, expectedVersion: input.expectedVersion, adjudicatorEntityId: verified.adjudicatorEntityId });
+  return capability;
+}
+
 export async function adjudicateContractDispute(client, input) {
   const worldId = requiredString(input.worldId, 'worldId');
   const contractId = requiredString(input.contractId, 'contractId');
@@ -168,9 +184,9 @@ export async function adjudicateContractDispute(client, input) {
   if (!['UPHOLD_CLAIM', 'REJECT_CLAIM'].includes(outcome)) throw problem('INVALID_ADJUDICATION_OUTCOME', 'outcome must be UPHOLD_CLAIM or REJECT_CLAIM', 400);
   const resolution = jsonObject(input.resolution, 'resolution', { required: true });
   if (!Object.keys(resolution).length) throw problem('RESOLUTION_REQUIRED', 'resolution must contain a structured explanation', 400);
-  if (!input.adjudicatorPort || typeof input.adjudicatorPort.verifyAdjudicator !== 'function') throw problem('ADJUDICATOR_VERIFIER_UNAVAILABLE', 'trusted adjudicator verifier is required', 503);
-  const verified = await input.adjudicatorPort.verifyAdjudicator({ worldId, contractId, disputeId, expectedVersion: input.expectedVersion, actorEntityId });
-  if (!verified || verified.authorized !== true || typeof verified.adjudicatorEntityId !== 'string' || !verified.adjudicatorEntityId.trim()) throw problem('FORBIDDEN_ADJUDICATOR', 'trusted authority did not authorize this adjudicator', 403);
+  const authorization = input.adjudicatorAuthorization;
+  const verified = authorization && adjudicatorAuthorizations.get(authorization);
+  if (!verified || verified.worldId !== worldId || verified.contractId !== contractId || verified.disputeId !== disputeId || verified.actorEntityId !== actorEntityId || verified.expectedVersion !== input.expectedVersion) throw problem('FORBIDDEN_ADJUDICATOR', 'a matching pre-verified adjudicator authorization is required', 403);
   const contract = await lockContract(client, { worldId, contractId });
   if (contract.status !== 'DISPUTED') throw problem('CONTRACT_NOT_DISPUTED', 'adjudication requires a DISPUTED contract', 409);
   assertVersion(contract, input.expectedVersion);
