@@ -6,6 +6,13 @@ const TASK_ID_RE = /^NH-\d{3,}$/;
 
 export const BOOTSTRAP_TASK_ID = 'NH-019';
 export const BOOTSTRAP_HEAD_REF = 'feat/nh-019-pr-scope-guard';
+export const REGISTRY_BOOTSTRAP_TASK_ID = 'NH-065';
+export const REGISTRY_BOOTSTRAP_HEAD_REF = 'feat/nh-065-scope-registry-bootstrap';
+export const REGISTRY_BOOTSTRAP_ALLOWED_PATHS = Object.freeze([
+  '.github/task-scopes/NH-062.json',
+  'scripts/check-pr-scope.js',
+  'tests/unit/pr-scope-guard.test.js'
+]);
 export const BOOTSTRAP_ALLOWED_PATHS = Object.freeze([
   '.github/pull_request_template.md',
   '.github/workflows/ci.yml',
@@ -149,7 +156,8 @@ function matchesAny(filePath, patterns) {
 
 export function findProtectedPathViolations(changedPaths, context) {
   const { taskId, headRef, source, capabilities = [] } = context;
-  const bootstrap = taskId === BOOTSTRAP_TASK_ID && headRef === BOOTSTRAP_HEAD_REF;
+  const bootstrap = (taskId === BOOTSTRAP_TASK_ID && headRef === BOOTSTRAP_HEAD_REF) ||
+    (taskId === REGISTRY_BOOTSTRAP_TASK_ID && headRef === REGISTRY_BOOTSTRAP_HEAD_REF);
   const canEditScopeControl = bootstrap || (source === 'BASE_REGISTRY' && capabilities.includes('PR_SCOPE_CONTROL'));
   const currentRuntimeOwner = taskId === 'NH-001' && headRef === 'fix/p3-runtime-review-hardening';
 
@@ -206,9 +214,13 @@ export function resolveScope({ taskId, headRef, declaredAllowedPaths, registrySc
     return { ...trusted, source: 'BASE_REGISTRY' };
   }
 
-  const bootstrap = taskId === BOOTSTRAP_TASK_ID && headRef === BOOTSTRAP_HEAD_REF;
-  if (bootstrap && !setsEqual(declaredAllowedPaths, BOOTSTRAP_ALLOWED_PATHS)) {
+  const legacyBootstrap = taskId === BOOTSTRAP_TASK_ID && headRef === BOOTSTRAP_HEAD_REF;
+  const registryBootstrap = taskId === REGISTRY_BOOTSTRAP_TASK_ID && headRef === REGISTRY_BOOTSTRAP_HEAD_REF;
+  if (legacyBootstrap && !setsEqual(declaredAllowedPaths, BOOTSTRAP_ALLOWED_PATHS)) {
     fail('NH-019 bootstrap Allowed-Paths must exactly match the built-in bootstrap scope.');
+  }
+  if (registryBootstrap && !setsEqual(declaredAllowedPaths, REGISTRY_BOOTSTRAP_ALLOWED_PATHS)) {
+    fail('NH-065 registry bootstrap Allowed-Paths must exactly match the built-in bootstrap scope.');
   }
   return { allowedPaths: declaredAllowedPaths, capabilities: [], source: 'PR_BODY_FALLBACK' };
 }
